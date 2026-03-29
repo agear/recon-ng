@@ -3,3 +3,5 @@
 *sublime*
 venv/
 scripts/
+recon/core/web/static/dist/
+frontend/node_modules/
