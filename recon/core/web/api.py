@@ -7,6 +7,8 @@ from recon.core.web.constants import EXPORTS, REPORTS
 import datetime
 import os
 import shutil
+import subprocess
+import sys as _sys
 
 resources = Blueprint('resources', __name__, url_prefix='/api')
 api = Api()
@@ -111,7 +113,10 @@ class TaskInst(Resource):
             job = current_app.task_queue.fetch_job(tid)
             if job:
                 task['status'] = job.get_status().value
-                task['result'] = job.result
+                try:
+                    task['result'] = job.result
+                except Exception:
+                    task['result'] = None
         else:
             task = tasks.get_task(tid)
         return task
@@ -742,6 +747,74 @@ class MarketplaceInstallAll(Resource):
         return {'installed': installed, 'errors': errors}
 
 api.add_resource(MarketplaceInstallAll, '/marketplace/install-all')
+
+
+class MarketplaceRemoveAll(Resource):
+
+    def delete(self):
+        '''
+        Removes all installed marketplace modules (equivalent to `marketplace remove all`)
+        ---
+        responses:
+            200:
+                description: Number of modules removed and any per-module errors
+        '''
+        recon._update_module_index()
+        removed = 0
+        errors = []
+        for module in list(recon._module_index):
+            if module.get('status') in ('installed', 'disabled', 'outdated'):
+                try:
+                    recon._remove_module(module['path'])
+                    removed += 1
+                except Exception as e:
+                    errors.append({'path': module['path'], 'error': str(e)})
+        if removed:
+            recon._do_modules_reload('')
+            recon._update_module_index()
+        return {'removed': removed, 'errors': errors}
+
+api.add_resource(MarketplaceRemoveAll, '/marketplace/remove-all')
+
+
+class MarketplaceDepsInstall(Resource):
+
+    def post(self):
+        '''
+        Installs Python package dependencies into the active virtual environment
+        ---
+        parameters:
+          - name: body
+            in: body
+            schema:
+                properties:
+                    packages:
+                        type: array
+                        items:
+                            type: string
+                required:
+                - packages
+        responses:
+            200:
+                description: pip install result
+        '''
+        packages = (request.json or {}).get('packages', [])
+        if not packages:
+            abort(400)
+        try:
+            result = subprocess.run(
+                [_sys.executable, '-m', 'pip', 'install'] + packages,
+                capture_output=True, text=True, timeout=120,
+            )
+            return {
+                'success': result.returncode == 0,
+                'output': result.stdout,
+                'error': result.stderr,
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'output': '', 'error': 'pip install timed out after 120s'}, 500
+
+api.add_resource(MarketplaceDepsInstall, '/marketplace/install-deps')
 
 
 class KeyList(Resource):
