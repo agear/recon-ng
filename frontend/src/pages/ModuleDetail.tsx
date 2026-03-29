@@ -195,6 +195,7 @@ export function ModuleDetail() {
   const [saved, setSaved] = useState(false)
   const [running, setRunning] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [runError, setRunError] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -227,11 +228,13 @@ export function ModuleDetail() {
 
   const handleRun = async () => {
     setRunning(true)
+    setRunError('')
+    setTaskId(null)
     try {
       const res = await runModule(modulePath)
       setTaskId(res.task)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to run module')
+      setRunError(e instanceof Error ? e.message : 'Failed to run module')
     } finally {
       setRunning(false)
     }
@@ -260,9 +263,12 @@ export function ModuleDetail() {
             {meta.version && <span className="badge-zinc">v{meta.version}</span>}
           </div>
         </div>
-        <button className="btn-primary" onClick={handleRun} disabled={running || !!taskId}>
-          {running ? <Spinner size="sm" /> : '▶ Run Module'}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button className="btn-primary" onClick={handleRun} disabled={running}>
+            {running ? <Spinner size="sm" /> : '▶ Run Module'}
+          </button>
+          {runError && <p className="text-xs text-red-400">{runError}</p>}
+        </div>
       </div>
 
       {/* Metadata cards */}
