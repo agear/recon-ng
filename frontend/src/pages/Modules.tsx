@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getModules } from '../api/client'
+import { getModules, getModule, ModuleMeta } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
+import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
 
 export function Modules() {
@@ -43,6 +44,19 @@ export function Modules() {
     return map
   }, [filtered])
 
+  const [preview, setPreview] = useState<{ path: string; meta: ModuleMeta | null; loading: boolean } | null>(null)
+
+  const handlePreview = async (path: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPreview({ path, meta: null, loading: true })
+    try {
+      const meta = await getModule(path)
+      setPreview({ path, meta, loading: false })
+    } catch {
+      setPreview(null)
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>
   if (error) return <div className="p-8 text-red-400 text-sm">{error}</div>
 
@@ -80,6 +94,49 @@ export function Modules() {
         </select>
       </div>
 
+      {preview && (
+        <Modal title={preview.path} onClose={() => setPreview(null)}>
+          {preview.loading ? (
+            <div className="flex items-center justify-center py-8"><Spinner size="lg" /></div>
+          ) : preview.meta ? (
+            <div className="flex flex-col gap-4 text-sm">
+              {preview.meta.description && (
+                <p className="text-zinc-300 text-sm">{preview.meta.description}</p>
+              )}
+              {preview.meta.options && preview.meta.options.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Options</p>
+                  <div className="flex flex-col gap-1">
+                    {preview.meta.options.map(o => (
+                      <div key={o.name} className="flex items-center justify-between py-1.5 border-b border-zinc-800/50 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-zinc-300 font-medium">{o.name}</span>
+                          {o.required && <span className="badge-red">required</span>}
+                        </div>
+                        <span className="text-xs text-zinc-500 font-mono">{o.value ?? 'not set'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {preview.meta.required_keys && preview.meta.required_keys.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Required Keys</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {preview.meta.required_keys.map(k => <span key={k} className="badge-amber">{k}</span>)}
+                  </div>
+                </div>
+              )}
+              <div className="mt-2 flex justify-end">
+                <button className="btn-primary" onClick={() => { setPreview(null); navigate(`/modules/${preview.path}`) }}>
+                  Open Module →
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
+      )}
+
       {filtered.length === 0 ? (
         <p className="text-zinc-600 text-sm">No modules match your search.</p>
       ) : (
@@ -102,7 +159,16 @@ export function Modules() {
                         <span className="text-sm text-zinc-200 font-medium">{name}</span>
                         {subpath && <span className="text-xs text-zinc-600">{subpath}</span>}
                       </div>
-                      <span className="text-zinc-600 text-xs ml-4">›</span>
+                      <div className="flex items-center gap-2 ml-4">
+                        <button
+                          onClick={e => handlePreview(m, e)}
+                          className="text-xs text-zinc-600 hover:text-zinc-300 transition-colors px-1"
+                          title="Show options"
+                        >
+                          ⚙
+                        </button>
+                        <span className="text-zinc-600 text-xs">›</span>
+                      </div>
                     </div>
                   )
                 })}
