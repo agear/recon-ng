@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMarketplace, installModule, removeModule, refreshMarketplace, installAllModules, MarketplaceModule } from '../api/client'
+import { getMarketplace, installModule, removeModule, refreshMarketplace, installAllModules, removeAllModules, installDeps, MarketplaceModule } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
@@ -20,6 +20,8 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
   const [error, setError] = useState('')
   const [showDeps, setShowDeps] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
+  const [installingDeps, setInstallingDeps] = useState(false)
+  const [depsResult, setDepsResult] = useState<{ success: boolean; output: string; error: string } | null>(null)
   const isInstalled = module.status === 'installed' || module.status === 'outdated' || module.status === 'disabled'
   const hasDeps = module.dependencies?.length > 0
   const hasKeys = module.required_keys?.length > 0
@@ -99,9 +101,32 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
       </div>
 
       {showDeps && (
-        <Modal title={`Dependencies — ${module.path}`} onClose={() => setShowDeps(false)}>
+        <Modal
+          title={`Dependencies — ${module.path}`}
+          onClose={() => { setShowDeps(false); setDepsResult(null) }}
+          footer={
+            <button
+              className="btn-primary text-xs"
+              onClick={async () => {
+                setInstallingDeps(true)
+                setDepsResult(null)
+                try {
+                  const r = await installDeps(module.dependencies)
+                  setDepsResult(r)
+                } catch (e) {
+                  setDepsResult({ success: false, output: '', error: e instanceof Error ? e.message : 'Failed' })
+                } finally {
+                  setInstallingDeps(false)
+                }
+              }}
+              disabled={installingDeps}
+            >
+              {installingDeps ? <Spinner size="sm" /> : '⬇ Install Packages'}
+            </button>
+          }
+        >
           <div className="flex flex-col gap-3 text-sm text-zinc-300">
-            <p className="text-xs text-zinc-500">This module requires the following Python packages to be installed in your environment:</p>
+            <p className="text-xs text-zinc-500">This module requires the following Python packages:</p>
             <div className="flex flex-col gap-1">
               {module.dependencies.map(dep => (
                 <div key={dep} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
@@ -109,7 +134,11 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
                 </div>
               ))}
             </div>
-            <p className="text-xs text-zinc-600">Install missing packages with: <span className="font-mono text-zinc-400">pip install {module.dependencies.join(' ')}</span></p>
+            {depsResult && (
+              <div className={`rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-48 overflow-y-auto ${depsResult.success ? 'bg-emerald-950/30 border border-emerald-900/50 text-emerald-300' : 'bg-red-950/30 border border-red-900 text-red-300'}`}>
+                {depsResult.success ? depsResult.output : depsResult.error || depsResult.output}
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -125,7 +154,9 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
                 </div>
               ))}
             </div>
-            <p className="text-xs text-zinc-600">Add keys on the <strong className="text-zinc-400">API Keys</strong> page.</p>
+            <button onClick={() => { setShowKeys(false); navigate('/keys') }} className="text-xs text-brand hover:underline text-left mt-1">
+              Go to API Keys page →
+            </button>
           </div>
         </Modal>
       )}
@@ -140,6 +171,9 @@ export function Marketplace() {
   const [showInstallAll, setShowInstallAll] = useState(false)
   const [installingAll, setInstallingAll] = useState(false)
   const [installAllResult, setInstallAllResult] = useState<{ installed: number; errors: { path: string; error: string }[] } | null>(null)
+  const [showRemoveAll, setShowRemoveAll] = useState(false)
+  const [removingAll, setRemovingAll] = useState(false)
+  const [removeAllResult, setRemoveAllResult] = useState<{ removed: number; errors: { path: string; error: string }[] } | null>(null)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
@@ -154,6 +188,20 @@ export function Marketplace() {
   }
 
   useEffect(() => { load() }, [])
+
+  const handleRemoveAll = async () => {
+    setRemovingAll(true)
+    try {
+      const result = await removeAllModules()
+      setRemoveAllResult(result)
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Remove all failed')
+      setShowRemoveAll(false)
+    } finally {
+      setRemovingAll(false)
+    }
+  }
 
   const handleInstallAll = async () => {
     setInstallingAll(true)
@@ -236,6 +284,9 @@ export function Marketplace() {
           <button className="btn-primary" onClick={() => setShowInstallAll(true)} disabled={installingAll || counts.total === 0}>
             {installingAll ? <Spinner size="sm" /> : '⬇ Install All'}
           </button>
+          <button className="btn-danger" onClick={() => setShowRemoveAll(true)} disabled={removingAll || counts.installed === 0}>
+            {removingAll ? <Spinner size="sm" /> : '✕ Remove All'}
+          </button>
         </div>
       </div>
 
@@ -281,6 +332,53 @@ export function Marketplace() {
       )}
 
       <p className="text-xs text-zinc-600 mt-3">{filtered.length} of {modules.length} modules</p>
+
+      {showRemoveAll && !removeAllResult && (
+        <Modal
+          title="Remove All Modules"
+          onClose={() => setShowRemoveAll(false)}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setShowRemoveAll(false)} disabled={removingAll}>Cancel</button>
+              <button className="btn-danger" onClick={handleRemoveAll} disabled={removingAll}>
+                {removingAll ? <><Spinner size="sm" /><span className="ml-2">Removing…</span></> : 'Remove All'}
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p>This will uninstall all <strong className="text-zinc-100">{counts.installed}</strong> installed modules.</p>
+            <p className="text-xs text-zinc-500">This cannot be undone. You can reinstall modules from the marketplace at any time.</p>
+          </div>
+        </Modal>
+      )}
+
+      {removeAllResult && (
+        <Modal
+          title="Remove All Complete"
+          onClose={() => { setRemoveAllResult(null); setShowRemoveAll(false) }}
+          footer={
+            <button className="btn-primary" onClick={() => { setRemoveAllResult(null); setShowRemoveAll(false) }}>Done</button>
+          }
+        >
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p><strong className="text-emerald-400">{removeAllResult.removed}</strong> module{removeAllResult.removed !== 1 ? 's' : ''} removed.</p>
+            {removeAllResult.errors.length > 0 && (
+              <div>
+                <p className="text-xs text-amber-400 mb-2">{removeAllResult.errors.length} failed:</p>
+                <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                  {removeAllResult.errors.map(e => (
+                    <div key={e.path} className="bg-zinc-950 rounded px-3 py-2">
+                      <p className="font-mono text-xs text-zinc-300">{e.path}</p>
+                      <p className="text-xs text-red-400 mt-0.5">{e.error}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {showInstallAll && !installAllResult && (
         <Modal
