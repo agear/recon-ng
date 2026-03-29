@@ -3,6 +3,9 @@ from flask_restful import Resource, Api
 from recon.core.web import recon, tasks
 from recon.core.web.utils import columnize
 from recon.core.web.constants import EXPORTS, REPORTS
+import datetime
+import os
+import shutil
 
 resources = Blueprint('resources', __name__, url_prefix='/api')
 api = Api()
@@ -241,6 +244,38 @@ class WorkspaceList(Resource):
             'workspaces': sorted(recon._get_workspaces()),
         }
 
+    def post(self):
+        '''
+        Creates a new workspace
+        ---
+        parameters:
+          - name: body
+            in: body
+            description: Object containing the name of the workspace to create
+            schema:
+                properties:
+                    name:
+                        type: string
+                required:
+                - name
+        responses:
+            201:
+                description: Object containing the created workspace's information
+            409:
+                description: Workspace already exists
+        '''
+        name = request.json.get('name')
+        if not name:
+            abort(400)
+        if name in recon._get_workspaces():
+            abort(409)
+        recon._init_workspace(name)
+        return {
+            'name': name,
+            'status': 'inactive',
+            'options': [],
+        }, 201
+
 api.add_resource(WorkspaceList, '/workspaces/')
 
 
@@ -339,6 +374,32 @@ class WorkspaceInst(Resource):
                         recon.options[name] = value
                         recon._save_config(name)
         return self.get(workspace)
+
+    def delete(self, workspace):
+        '''
+        Deletes the specified workspace
+        ---
+        parameters:
+          - name: workspace
+            in: path
+            description: Name of the workspace to delete
+            required: true
+            type: string
+        responses:
+            204:
+                description: Workspace deleted
+            400:
+                description: Cannot delete the active workspace
+            404:
+                description: Workspace not found
+        '''
+        if workspace not in recon._get_workspaces():
+            abort(404)
+        if workspace == current_app.config['WORKSPACE']:
+            abort(400)
+        if not recon.remove_workspace(workspace):
+            abort(500)
+        return '', 204
 
 api.add_resource(WorkspaceInst, '/workspaces/<string:workspace>')
 
@@ -481,14 +542,16 @@ class TableInst(Resource):
         if columns:
             rows = recon.query(f"SELECT {columns} FROM {table}", include_header=True)
         else:
-            rows = recon.query(f"SELECT * FROM {table}", include_header=True)
+            # include rowid for delete/notes support
+            rows = recon.query(f"SELECT rowid, * FROM {table}", include_header=True)
         columns = rows.pop(0)
         rows = columnize(columns, rows)
         # dynamically determine and call export function
         _format = request.args.get('format')
         if _format and _format in EXPORTS:
-            # any required serialization is handled at the exporter level
-            return EXPORTS[_format](rows=rows)
+            # strip rowid before exporting
+            export_rows = [{k: v for k, v in r.items() if k != 'rowid'} for r in rows]
+            return EXPORTS[_format](rows=export_rows)
         return {
             'workspace': current_app.config['WORKSPACE'],
             'table': table,
@@ -522,3 +585,332 @@ class ExportList(Resource):
         }
 
 api.add_resource(ExportList, '/exports')
+
+
+class MarketplaceList(Resource):
+
+    def get(self):
+        '''
+        Gets all modules from the marketplace index
+        ---
+        parameters:
+          - name: q
+            in: query
+            description: Optional search term
+            required: false
+            type: string
+        responses:
+            200:
+                description: List of marketplace modules
+        '''
+        recon._update_module_index()
+        q = request.args.get('q', '').strip()
+        if q:
+            modules = recon._search_module_index(q)
+        else:
+            modules = list(recon._module_index)
+        return {'modules': sorted(modules, key=lambda m: m['path'])}
+
+api.add_resource(MarketplaceList, '/marketplace/')
+
+
+class MarketplaceInst(Resource):
+
+    def get(self, path):
+        '''
+        Gets info about a specific marketplace module
+        ---
+        parameters:
+          - name: path
+            in: path
+            required: true
+            type: string
+        responses:
+            200:
+                description: Module marketplace info
+            404:
+                description: Module not found in index
+        '''
+        recon._update_module_index()
+        module = recon._get_module_from_index(path)
+        if module is None:
+            abort(404)
+        return module
+
+    def post(self, path):
+        '''
+        Installs a module from the marketplace
+        ---
+        parameters:
+          - name: path
+            in: path
+            required: true
+            type: string
+        responses:
+            200:
+                description: Module installed
+            404:
+                description: Module not found in index
+        '''
+        recon._update_module_index()
+        module = recon._get_module_from_index(path)
+        if module is None:
+            abort(404)
+        try:
+            recon._install_module(path)
+            recon._do_modules_reload('')
+            recon._update_module_index()
+        except Exception as e:
+            abort(500, str(e))
+        return recon._get_module_from_index(path)
+
+    def delete(self, path):
+        '''
+        Removes an installed marketplace module
+        ---
+        parameters:
+          - name: path
+            in: path
+            required: true
+            type: string
+        responses:
+            204:
+                description: Module removed
+            404:
+                description: Module not found or not installed
+        '''
+        recon._update_module_index()
+        module = recon._get_module_from_index(path)
+        if module is None or module.get('status') not in ('installed', 'disabled', 'outdated'):
+            abort(404)
+        recon._remove_module(path)
+        recon._do_modules_reload('')
+        return '', 204
+
+api.add_resource(MarketplaceInst, '/marketplace/<path:path>')
+
+
+class MarketplaceRefresh(Resource):
+
+    def post(self):
+        '''
+        Refreshes the marketplace module index from the remote repository
+        ---
+        responses:
+            200:
+                description: Index refreshed
+        '''
+        recon._fetch_module_index()
+        recon._update_module_index()
+        return {'count': len(recon._module_index)}
+
+api.add_resource(MarketplaceRefresh, '/marketplace/refresh')
+
+
+class KeyList(Resource):
+
+    def get(self):
+        '''
+        Gets all API keys from the keystore
+        ---
+        responses:
+            200:
+                description: List of API keys (values are returned; mask in the UI)
+                schema:
+                    properties:
+                        keys:
+                            type: array
+                            items:
+                                type: object
+                    required:
+                    - keys
+        '''
+        names = recon._get_key_names()
+        keys = [{'name': n, 'value': recon.get_key(n)} for n in sorted(names)]
+        return {'keys': keys}
+
+    def post(self):
+        '''
+        Adds or updates an API key in the keystore
+        ---
+        parameters:
+          - name: body
+            in: body
+            description: Object containing the key name and value
+            schema:
+                properties:
+                    name:
+                        type: string
+                    value:
+                        type: string
+                required:
+                - name
+                - value
+        responses:
+            201:
+                description: Key added
+        '''
+        name = request.json.get('name')
+        value = request.json.get('value')
+        if not name or not value:
+            abort(400)
+        recon.add_key(name, value)
+        return {'name': name}, 201
+
+api.add_resource(KeyList, '/keys/')
+
+
+class KeyInst(Resource):
+
+    def delete(self, name):
+        '''
+        Removes an API key from the keystore
+        ---
+        parameters:
+          - name: name
+            in: path
+            description: Name of the key to remove
+            required: true
+            type: string
+        responses:
+            204:
+                description: Key removed
+            404:
+                description: Key not found
+        '''
+        if name not in recon._get_key_names():
+            abort(404)
+        recon.remove_key(name)
+        return '', 204
+
+api.add_resource(KeyInst, '/keys/<string:name>')
+
+
+# ==============================================================
+# TABLE ROW OPERATIONS (insert, delete, notes)
+# ==============================================================
+
+class TableSchema(Resource):
+
+    def get(self, table):
+        '''Returns the column schema for the specified table'''
+        if table not in recon.get_tables():
+            abort(404)
+        columns = recon.get_columns(table)
+        return {'table': table, 'columns': [{'name': c[0], 'type': c[1]} for c in columns]}
+
+api.add_resource(TableSchema, '/tables/<string:table>/schema')
+
+
+class TableRowList(Resource):
+
+    def post(self, table):
+        '''Inserts a row into the specified table'''
+        if table not in recon.get_tables():
+            abort(404)
+        insert_fn = getattr(recon, f'insert_{table}', None)
+        if insert_fn is None:
+            abort(400)
+        record = {k: v or None for k, v in (request.json or {}).items()}
+        try:
+            rowcount = insert_fn(mute=True, **record)
+        except TypeError as e:
+            abort(400, str(e))
+        return {'inserted': rowcount}, 201
+
+api.add_resource(TableRowList, '/tables/<string:table>/rows')
+
+
+class TableRowInst(Resource):
+
+    def delete(self, table, rowid):
+        '''Deletes the specified row from the table'''
+        if table not in recon.get_tables():
+            abort(404)
+        rowcount = recon.query(f'DELETE FROM {table} WHERE rowid=?', (rowid,))
+        if rowcount == 0:
+            abort(404)
+        return '', 204
+
+    def patch(self, table, rowid):
+        '''Updates the notes field on the specified row'''
+        if table not in recon.get_tables():
+            abort(404)
+        notes = (request.json or {}).get('notes', '')
+        recon.query(f'UPDATE {table} SET notes=? WHERE rowid=?', (notes, rowid))
+        rows = recon.query(f'SELECT rowid, * FROM {table} WHERE rowid=?', (rowid,), include_header=True)
+        if not rows or len(rows) < 2:
+            abort(404)
+        columns = rows[0]
+        return columnize(columns, rows[1:])[0]
+
+api.add_resource(TableRowInst, '/tables/<string:table>/rows/<int:rowid>')
+
+
+class QueryInst(Resource):
+
+    def post(self):
+        '''Executes a read-only SQL query against the workspace database'''
+        sql = (request.json or {}).get('sql', '').strip()
+        if not sql:
+            abort(400)
+        # only allow SELECT statements for safety
+        if not sql.upper().startswith('SELECT'):
+            abort(400)
+        try:
+            rows = recon.query(sql, include_header=True)
+        except Exception as e:
+            return {'error': str(e)}, 400
+        columns = rows.pop(0) if rows else []
+        return {
+            'columns': columns,
+            'rows': columnize(columns, rows),
+        }
+
+api.add_resource(QueryInst, '/query')
+
+
+# ==============================================================
+# SNAPSHOTS
+# ==============================================================
+
+class SnapshotList(Resource):
+
+    def get(self):
+        '''Lists all snapshots for the current workspace'''
+        snapshots = sorted(recon._get_snapshots(), reverse=True)
+        return {'snapshots': snapshots}
+
+    def post(self):
+        '''Takes a snapshot of the current workspace database'''
+        ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+        name = f'snapshot_{ts}.db'
+        src = os.path.join(recon.workspace, 'data.db')
+        dst = os.path.join(recon.workspace, name)
+        shutil.copyfile(src, dst)
+        return {'name': name}, 201
+
+api.add_resource(SnapshotList, '/snapshots/')
+
+
+class SnapshotInst(Resource):
+
+    def post(self, name):
+        '''Loads (restores) a snapshot over the current workspace database'''
+        if name not in recon._get_snapshots():
+            abort(404)
+        src = os.path.join(recon.workspace, name)
+        dst = os.path.join(recon.workspace, 'data.db')
+        shutil.copyfile(src, dst)
+        # reinitialize workspace so the restored DB is live
+        recon._init_workspace(current_app.config['WORKSPACE'])
+        return {'name': name}
+
+    def delete(self, name):
+        '''Deletes a snapshot'''
+        if name not in recon._get_snapshots():
+            abort(404)
+        os.remove(os.path.join(recon.workspace, name))
+        return '', 204
+
+api.add_resource(SnapshotInst, '/snapshots/<string:name>')
