@@ -4,6 +4,7 @@ import { WorkspaceContext } from '../../hooks/useWorkspace'
 import { activateWorkspace, createWorkspace, getWorkspaces } from '../../api/client'
 import { Spinner } from '../ui/Spinner'
 import { Modal } from '../ui/Modal'
+import { QuickstartModal, QUICKSTART_STORAGE_KEY } from '../onboarding/QuickstartModal'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -20,6 +21,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [active, setActiveState] = useState('')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [showQuickstart, setShowQuickstart] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
@@ -32,6 +34,11 @@ export function Shell({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => { refresh() }, [])
+  useEffect(() => {
+    if (!localStorage.getItem(QUICKSTART_STORAGE_KEY)) {
+      setShowQuickstart(true)
+    }
+  }, [])
 
   const setActive = async (name: string) => {
     await activateWorkspace(name)
@@ -112,8 +119,15 @@ export function Shell({ children }: { children: ReactNode }) {
           </nav>
 
           {/* Footer */}
-          <div className="px-4 py-3 border-t border-zinc-800">
+          <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
             <p className="text-xs text-zinc-600">v5.1.2</p>
+            <button
+              onClick={() => setShowQuickstart(true)}
+              className="text-xs text-zinc-600 hover:text-brand transition-colors"
+              title="Open quick start guide"
+            >
+              Quick Start
+            </button>
           </div>
         </aside>
 
@@ -122,6 +136,14 @@ export function Shell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      <QuickstartModal
+        open={showQuickstart}
+        onClose={() => {
+          localStorage.setItem(QUICKSTART_STORAGE_KEY, '1')
+          setShowQuickstart(false)
+        }}
+      />
 
       {showCreate && (
         <Modal

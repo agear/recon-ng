@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getKeys, addKey, deleteKey, KeyRecord } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
+import { HelpButton } from '../components/help/HelpButton'
 
 export function Keys() {
   const [keys, setKeys] = useState<KeyRecord[]>([])
@@ -61,7 +62,22 @@ export function Keys() {
     <div className="p-8 max-w-3xl">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">API Keys</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-zinc-100">API Keys</h1>
+            <HelpButton title="API Keys">
+              <p>API keys are stored in a global keystore and shared across all workspaces. Modules that require a key will not run until it's present.</p>
+              <p className="text-xs text-zinc-500">Where to get common keys:</p>
+              <ul className="space-y-1.5 text-xs text-zinc-400">
+                <li><span className="font-mono text-zinc-300">shodan_api</span> — <span className="text-zinc-500">account.shodan.io/register</span></li>
+                <li><span className="font-mono text-zinc-300">hunter_io</span> — <span className="text-zinc-500">hunter.io/api-keys</span></li>
+                <li><span className="font-mono text-zinc-300">virustotal_api</span> — <span className="text-zinc-500">virustotal.com/gui/my-apikey</span></li>
+                <li><span className="font-mono text-zinc-300">google_api</span> — <span className="text-zinc-500">console.developers.google.com</span></li>
+                <li><span className="font-mono text-zinc-300">google_cse</span> — <span className="text-zinc-500">cse.google.com (Custom Search Engine ID)</span></li>
+                <li><span className="font-mono text-zinc-300">github_api</span> — <span className="text-zinc-500">github.com/settings/tokens</span></li>
+              </ul>
+              <p className="text-xs text-zinc-600 pt-1">Key values are masked by default. Click Show to reveal a stored key.</p>
+            </HelpButton>
+          </div>
           <p className="text-sm text-zinc-500 mt-1">Keys are stored in the global recon-ng keystore and shared across workspaces.</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Key</button>

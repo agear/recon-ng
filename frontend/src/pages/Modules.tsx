@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getModules } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
+import { HelpButton } from '../components/help/HelpButton'
 
 export function Modules() {
   const [modules, setModules] = useState<string[]>([])
@@ -48,7 +49,19 @@ export function Modules() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-zinc-100">Modules</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-zinc-100">Modules</h1>
+          <HelpButton title="Modules">
+            <p>Modules are the core building blocks of Recon-ng. Each one queries a single data source and writes results into the workspace database.</p>
+            <p className="text-xs text-zinc-500">Module paths follow the format <span className="font-mono text-zinc-300">category/input-output/name</span>. For example:</p>
+            <ul className="space-y-1 text-xs text-zinc-400">
+              <li><span className="font-mono text-zinc-300">recon/domains-hosts/resolve</span> — takes domains, outputs hosts</li>
+              <li><span className="font-mono text-zinc-300">recon/hosts-ports/shodan_ip</span> — takes hosts, outputs open ports</li>
+              <li><span className="font-mono text-zinc-300">recon/domains-contacts/hunter_io</span> — takes domains, outputs contacts</li>
+            </ul>
+            <p className="text-xs text-zinc-500">Only installed modules appear here. Visit the <strong className="text-zinc-300">Marketplace</strong> to install more.</p>
+          </HelpButton>
+        </div>
         <p className="text-sm text-zinc-500 mt-1">{modules.length} modules loaded</p>
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMarketplace, installModule, removeModule, refreshMarketplace, MarketplaceModule } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
+import { HelpButton } from '../components/help/HelpButton'
 
 type Status = MarketplaceModule['status']
 
@@ -146,7 +147,20 @@ export function Marketplace() {
     <div className="p-8 max-w-5xl">
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Marketplace</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-zinc-100">Marketplace</h1>
+            <HelpButton title="Marketplace">
+              <p>The Marketplace is a remote catalog of all available Recon-ng modules hosted on GitHub. Install only the modules you need — they're stored in <span className="font-mono text-zinc-300">~/.recon-ng/modules/</span>.</p>
+              <p className="text-xs text-zinc-500">Module statuses:</p>
+              <ul className="space-y-1 text-xs text-zinc-400">
+                <li><span className="badge-green inline mr-1">installed</span> installed and up to date</li>
+                <li><span className="badge-amber inline mr-1">outdated</span> a newer version is available — click Update</li>
+                <li><span className="badge-zinc inline mr-1">disabled</span> installed but missing a required dependency</li>
+                <li><span className="badge-zinc inline mr-1">not installed</span> available but not yet installed</li>
+              </ul>
+              <p className="text-xs text-zinc-600 pt-1">Click <strong className="text-zinc-400">↻ Refresh Index</strong> to fetch the latest module list from the remote repository if the catalog appears empty or stale.</p>
+            </HelpButton>
+          </div>
           <p className="text-sm text-zinc-500 mt-1">
             {counts.installed} installed · {counts.outdated > 0 && <span className="text-amber-400">{counts.outdated} outdated · </span>}{counts.total} total
           </p>

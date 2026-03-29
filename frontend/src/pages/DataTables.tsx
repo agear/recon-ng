@@ -7,6 +7,7 @@ import {
 } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
+import { HelpButton } from '../components/help/HelpButton'
 
 // ─── Sortable / filterable table with row actions ───────────────────────────
 
@@ -425,7 +426,25 @@ export function DataTables() {
         {/* Query view */}
         {!selected && tab === 'query' && (
           <div>
-            <h2 className="text-lg font-semibold text-zinc-100 mb-4">SQL Query</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="text-lg font-semibold text-zinc-100">SQL Query</h2>
+              <HelpButton title="SQL Query">
+                <p>Run read-only <span className="font-mono text-zinc-300">SELECT</span> queries directly against the active workspace database. Only SELECT statements are permitted.</p>
+                <p className="text-xs text-zinc-500">Example queries:</p>
+                <pre className="bg-zinc-950 border border-zinc-800 rounded p-2 text-xs font-mono text-zinc-300 overflow-x-auto whitespace-pre">{`-- All resolved hosts with IPs
+SELECT host, ip_address FROM hosts
+WHERE ip_address IS NOT NULL
+
+-- Contacts for a specific domain
+SELECT first_name, last_name, email
+FROM contacts WHERE email LIKE '%example.com'
+
+-- Count records by table
+SELECT 'hosts' AS t, COUNT(*) FROM hosts
+UNION SELECT 'contacts', COUNT(*) FROM contacts`}</pre>
+                <p className="text-xs text-zinc-600">Press <span className="font-mono text-zinc-400">⌘+Enter</span> (or <span className="font-mono text-zinc-400">Ctrl+Enter</span>) to run the query.</p>
+              </HelpButton>
+            </div>
             <QueryPanel />
           </div>
         )}
@@ -446,7 +465,19 @@ export function DataTables() {
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-lg font-semibold text-zinc-100">{tableData.table}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-lg font-semibold text-zinc-100">{tableData.table}</h1>
+                    <HelpButton title={`${tableData.table} table`}>
+                      <p>This table stores data collected by modules that output <strong className="text-zinc-100">{tableData.table}</strong> records.</p>
+                      <ul className="space-y-1 text-xs text-zinc-400">
+                        <li><strong className="text-zinc-300">notes</strong> — click any notes cell to add your own investigation annotations</li>
+                        <li><strong className="text-zinc-300">✕ button</strong> — hover a row and click the red × to delete it</li>
+                        <li><strong className="text-zinc-300">Columns</strong> — toggle which columns are visible and included in exports</li>
+                        <li><strong className="text-zinc-300">CSV / JSON</strong> — export the current view (respects column visibility)</li>
+                      </ul>
+                      <p className="text-xs text-zinc-600 pt-1">Click any column header to sort. Use the filter box to search across all fields.</p>
+                    </HelpButton>
+                  </div>
                   <p className="text-xs text-zinc-500 mt-0.5">{tableData.rows.length} records</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">

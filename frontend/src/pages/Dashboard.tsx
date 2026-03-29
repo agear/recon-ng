@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDashboard, DashboardResponse } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
+import { HelpButton } from '../components/help/HelpButton'
 
 function StatCard({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
   return (
@@ -52,7 +53,13 @@ export function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Records */}
         <section>
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Harvested Data</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Harvested Data</h2>
+            <HelpButton title="Harvested Data">
+              <p>These counts show how many records each workspace table currently holds. Click any card to jump directly to that table in the Data explorer.</p>
+              <p className="text-zinc-500 text-xs">Tables are populated automatically when you run modules. <strong className="text-zinc-300">hosts</strong> holds resolved subdomains, <strong className="text-zinc-300">contacts</strong> holds email addresses and people, <strong className="text-zinc-300">domains</strong> holds root domain names, and so on.</p>
+            </HelpButton>
+          </div>
           {data.records.length === 0 ? (
             <p className="text-sm text-zinc-600">No records yet. Run a module to start collecting data.</p>
           ) : (
@@ -71,7 +78,13 @@ export function Dashboard() {
 
         {/* Activity */}
         <section>
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Module Activity</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Module Activity</h2>
+            <HelpButton title="Module Activity">
+              <p>Shows how many times each module has been run in this workspace, ordered by run count. Click a row to open that module's detail page and run it again.</p>
+              <p className="text-zinc-500 text-xs">Module paths follow the format <span className="font-mono text-zinc-300">category/input-output/name</span>. For example, <span className="font-mono text-zinc-300">recon/domains-hosts/resolve</span> takes domains as input and outputs resolved host records.</p>
+            </HelpButton>
+          </div>
           {data.activity.length === 0 ? (
             <p className="text-sm text-zinc-600">No modules run yet.</p>
           ) : (

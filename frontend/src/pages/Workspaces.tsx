@@ -3,6 +3,7 @@ import { getWorkspace, deleteWorkspace, updateWorkspaceOptions, WorkspaceRespons
 import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
+import { HelpButton } from '../components/help/HelpButton'
 
 function OptionsForm({ workspace, options, onSave }: { workspace: string; options: WorkspaceOption[]; onSave: () => void }) {
   const [values, setValues] = useState<Record<string, string>>(
@@ -156,7 +157,21 @@ export function Workspaces() {
   return (
     <div className="p-8 max-w-3xl">
       <div className="mb-8">
-        <h1 className="text-xl font-semibold text-zinc-100">Workspaces</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-zinc-100">Workspaces</h1>
+          <HelpButton title="Workspaces">
+            <p>Each workspace is a separate SQLite database. Create one per target or engagement to keep all findings isolated.</p>
+            <p>Expanding a workspace row (when it's active) reveals <strong className="text-zinc-100">Global Options</strong> — settings that apply to every module run in that workspace:</p>
+            <ul className="space-y-1 text-xs text-zinc-400">
+              <li><span className="font-mono text-zinc-300">nameserver</span> — DNS resolver to use (default: 8.8.8.8)</li>
+              <li><span className="font-mono text-zinc-300">proxy</span> — HTTP proxy for all module requests (host:port)</li>
+              <li><span className="font-mono text-zinc-300">threads</span> — number of concurrent threads (default: 10)</li>
+              <li><span className="font-mono text-zinc-300">timeout</span> — socket timeout in seconds (default: 10)</li>
+              <li><span className="font-mono text-zinc-300">user-agent</span> — custom User-Agent header for HTTP requests</li>
+              <li><span className="font-mono text-zinc-300">verbosity</span> — output level: 0 = quiet, 1 = verbose, 2 = debug</li>
+            </ul>
+          </HelpButton>
+        </div>
         <p className="text-sm text-zinc-500 mt-1">Each workspace has an isolated database. Use the sidebar to create new ones.</p>
       </div>
 

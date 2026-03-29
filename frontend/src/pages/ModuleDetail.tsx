@@ -4,6 +4,7 @@ import { getModule, patchModule, runModule, ModuleMeta, ModuleOption } from '../
 import { useTaskPoller } from '../hooks/useTaskPoller'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
+import { HelpButton } from '../components/help/HelpButton'
 
 function OptionDescription({ description, onInfoClick }: { description: string; onInfoClick: () => void }) {
   // Render "info" inside "(see 'info' for details)" as a clickable button
@@ -279,7 +280,17 @@ export function ModuleDetail() {
       {/* Options */}
       {meta.options && meta.options.length > 0 && (
         <div className="card p-5 mb-6">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Options</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Options</h2>
+            <HelpButton title="Module Options">
+              <p><strong className="text-zinc-100">SOURCE</strong> is the most important option. It controls what data the module uses as input:</p>
+              <ul className="space-y-1.5 text-xs text-zinc-400">
+                <li><span className="font-mono text-zinc-300">default</span> — reads all matching rows from the workspace database using the module's built-in query</li>
+                <li><span className="font-mono text-zinc-300">example.com</span> — a literal value used as the single input (e.g. a domain, IP, or email)</li>
+              </ul>
+              <p className="text-xs text-zinc-500 pt-1">Options marked <span className="badge-red inline">required</span> must be set before you can run the module. Save options first, then click Run Module.</p>
+            </HelpButton>
+          </div>
           <div>
             {meta.options.map(opt => (
               <OptionRow
