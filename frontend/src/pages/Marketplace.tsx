@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMarketplace, installModule, removeModule, refreshMarketplace, MarketplaceModule } from '../api/client'
+import { getMarketplace, installModule, removeModule, refreshMarketplace, installAllModules, MarketplaceModule } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
+import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
 
 type Status = MarketplaceModule['status']
@@ -17,7 +18,11 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showDeps, setShowDeps] = useState(false)
+  const [showKeys, setShowKeys] = useState(false)
   const isInstalled = module.status === 'installed' || module.status === 'outdated' || module.status === 'disabled'
+  const hasDeps = module.dependencies?.length > 0
+  const hasKeys = module.required_keys?.length > 0
 
   const handleInstall = async () => {
     setBusy(true)
@@ -46,43 +51,85 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
   }
 
   return (
-    <div className="border-b border-zinc-800/50 last:border-0 px-4 py-3 hover:bg-zinc-800/20 transition-colors">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {isInstalled ? (
+    <>
+      <div className="border-b border-zinc-800/50 last:border-0 px-4 py-3 hover:bg-zinc-800/20 transition-colors">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {isInstalled ? (
                 <button onClick={() => navigate(`/modules/${module.path}`)} className="text-sm font-medium text-brand hover:underline font-mono text-left">
                   {module.path}
                 </button>
               ) : (
                 <span className="text-sm font-medium text-zinc-200 font-mono">{module.path}</span>
               )}
-            <span className={STATUS_BADGE[module.status]}>{module.status}</span>
-            {module.status === 'outdated' && <span className="badge-amber">update available</span>}
-            {module.required_keys?.length > 0 && (
-              <span className="badge-zinc">🔑 key required</span>
+              <span className={STATUS_BADGE[module.status]}>{module.status}</span>
+              {module.status === 'outdated' && <span className="badge-amber">update available</span>}
+              {hasDeps && (
+                <button onClick={() => setShowDeps(true)} className="badge-zinc hover:bg-zinc-600 transition-colors cursor-pointer" title="Has dependencies — click for details">
+                  dependencies
+                </button>
+              )}
+              {hasKeys && (
+                <button onClick={() => setShowKeys(true)} className="badge-zinc hover:bg-zinc-600 transition-colors cursor-pointer" title="Requires API key — click for details">
+                  🔑 key required
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500 mt-0.5">{module.description}</p>
+            {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-zinc-600">v{module.version}</span>
+            {module.last_updated && <span className="text-xs text-zinc-600">{module.last_updated}</span>}
+            {busy ? (
+              <Spinner size="sm" />
+            ) : isInstalled ? (
+              <div className="flex gap-2">
+                {module.status === 'outdated' && (
+                  <button className="btn-primary text-xs py-1" onClick={handleInstall}>Update</button>
+                )}
+                <button className="btn-danger text-xs py-1" onClick={handleRemove}>Remove</button>
+              </div>
+            ) : (
+              <button className="btn-ghost text-xs py-1" onClick={handleInstall}>Install</button>
             )}
           </div>
-          <p className="text-xs text-zinc-500 mt-0.5">{module.description}</p>
-          {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs text-zinc-600">v{module.version}</span>
-          {busy ? (
-            <Spinner size="sm" />
-          ) : isInstalled ? (
-            <div className="flex gap-2">
-              {module.status === 'outdated' && (
-                <button className="btn-primary text-xs py-1" onClick={handleInstall}>Update</button>
-              )}
-              <button className="btn-danger text-xs py-1" onClick={handleRemove}>Remove</button>
-            </div>
-          ) : (
-            <button className="btn-ghost text-xs py-1" onClick={handleInstall}>Install</button>
-          )}
         </div>
       </div>
-    </div>
+
+      {showDeps && (
+        <Modal title={`Dependencies — ${module.path}`} onClose={() => setShowDeps(false)}>
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p className="text-xs text-zinc-500">This module requires the following Python packages to be installed in your environment:</p>
+            <div className="flex flex-col gap-1">
+              {module.dependencies.map(dep => (
+                <div key={dep} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
+                  <span className="font-mono text-xs text-brand">{dep}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-600">Install missing packages with: <span className="font-mono text-zinc-400">pip install {module.dependencies.join(' ')}</span></p>
+          </div>
+        </Modal>
+      )}
+
+      {showKeys && (
+        <Modal title={`Required API Keys — ${module.path}`} onClose={() => setShowKeys(false)}>
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p className="text-xs text-zinc-500">This module will not run until the following keys are present in the keystore:</p>
+            <div className="flex flex-col gap-1">
+              {module.required_keys.map(key => (
+                <div key={key} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
+                  <span className="font-mono text-xs text-brand">{key}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-600">Add keys on the <strong className="text-zinc-400">API Keys</strong> page.</p>
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
 
@@ -90,6 +137,9 @@ export function Marketplace() {
   const [modules, setModules] = useState<MarketplaceModule[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [showInstallAll, setShowInstallAll] = useState(false)
+  const [installingAll, setInstallingAll] = useState(false)
+  const [installAllResult, setInstallAllResult] = useState<{ installed: number; errors: { path: string; error: string }[] } | null>(null)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
@@ -104,6 +154,20 @@ export function Marketplace() {
   }
 
   useEffect(() => { load() }, [])
+
+  const handleInstallAll = async () => {
+    setInstallingAll(true)
+    try {
+      const result = await installAllModules()
+      setInstallAllResult(result)
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Install all failed')
+      setShowInstallAll(false)
+    } finally {
+      setInstallingAll(false)
+    }
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -165,9 +229,14 @@ export function Marketplace() {
             {counts.installed} installed · {counts.outdated > 0 && <span className="text-amber-400">{counts.outdated} outdated · </span>}{counts.total} total
           </p>
         </div>
-        <button className="btn-ghost" onClick={handleRefresh} disabled={refreshing}>
-          {refreshing ? <Spinner size="sm" /> : '↻ Refresh Index'}
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-ghost" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? <Spinner size="sm" /> : '↻ Refresh Index'}
+          </button>
+          <button className="btn-primary" onClick={() => setShowInstallAll(true)} disabled={installingAll || counts.total === 0}>
+            {installingAll ? <Spinner size="sm" /> : '⬇ Install All'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -212,6 +281,53 @@ export function Marketplace() {
       )}
 
       <p className="text-xs text-zinc-600 mt-3">{filtered.length} of {modules.length} modules</p>
+
+      {showInstallAll && !installAllResult && (
+        <Modal
+          title="Install All Modules"
+          onClose={() => setShowInstallAll(false)}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setShowInstallAll(false)} disabled={installingAll}>Cancel</button>
+              <button className="btn-primary" onClick={handleInstallAll} disabled={installingAll}>
+                {installingAll ? <><Spinner size="sm" /><span className="ml-2">Installing…</span></> : 'Install All'}
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p>This will install all <strong className="text-zinc-100">{counts.total - counts.installed}</strong> not-yet-installed modules from the marketplace.</p>
+            <p className="text-xs text-zinc-500">This may take a minute. Modules that are already installed will be skipped.</p>
+          </div>
+        </Modal>
+      )}
+
+      {installAllResult && (
+        <Modal
+          title="Install All Complete"
+          onClose={() => { setInstallAllResult(null); setShowInstallAll(false) }}
+          footer={
+            <button className="btn-primary" onClick={() => { setInstallAllResult(null); setShowInstallAll(false) }}>Done</button>
+          }
+        >
+          <div className="flex flex-col gap-3 text-sm text-zinc-300">
+            <p><strong className="text-emerald-400">{installAllResult.installed}</strong> module{installAllResult.installed !== 1 ? 's' : ''} installed successfully.</p>
+            {installAllResult.errors.length > 0 && (
+              <div>
+                <p className="text-xs text-amber-400 mb-2">{installAllResult.errors.length} module{installAllResult.errors.length !== 1 ? 's' : ''} failed:</p>
+                <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                  {installAllResult.errors.map(e => (
+                    <div key={e.path} className="bg-zinc-950 rounded px-3 py-2">
+                      <p className="font-mono text-xs text-zinc-300">{e.path}</p>
+                      <p className="text-xs text-red-400 mt-0.5">{e.error}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
