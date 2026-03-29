@@ -1,4 +1,5 @@
-from flask import Blueprint, current_app, request, abort
+from flask import Blueprint, current_app, request, abort, jsonify
+import traceback as _traceback
 from flask_restful import Resource, Api
 from recon.core.web import recon, tasks
 from recon.core.web.utils import columnize
@@ -61,13 +62,15 @@ class TaskList(Resource):
         path = request.json.get('path')
         if not path or path not in recon._loaded_modules:
             abort(404)
-        job = current_app.task_queue.enqueue('recon.core.tasks.run_module', current_app.config['WORKSPACE'], path)
-        tid = job.get_id()
-        status = job.get_status()
-        tasks.add_task(tid, status)
-        return {
-            'task': tid,
-        }, 201
+        try:
+            job = current_app.task_queue.enqueue('recon.core.tasks.run_module', current_app.config['WORKSPACE'], path)
+            tid = job.id
+            raw = job.get_status()
+            status = raw.value if hasattr(raw, 'value') else (raw or 'queued')
+            tasks.add_task(tid, status)
+            return {'task': tid}, 201
+        except Exception as e:
+            return {'error': str(e), 'traceback': _traceback.format_exc()}, 500
 
 api.add_resource(TaskList, '/tasks/')
 
@@ -107,7 +110,7 @@ class TaskInst(Resource):
             }
             job = current_app.task_queue.fetch_job(tid)
             if job:
-                task['status'] = job.get_status()
+                task['status'] = job.get_status().value
                 task['result'] = job.result
         else:
             task = tasks.get_task(tid)
@@ -240,9 +243,15 @@ class WorkspaceList(Resource):
                     required:
                     - workspaces
         '''
-        return {
-            'workspaces': sorted(recon._get_workspaces()),
-        }
+        workspaces = []
+        for name in sorted(recon._get_workspaces()):
+            db_path = os.path.join(recon.spaces_path, name, 'data.db')
+            try:
+                modified = datetime.datetime.fromtimestamp(os.path.getmtime(db_path)).strftime('%Y-%m-%d %H:%M:%S')
+            except OSError:
+                modified = None
+            workspaces.append({'name': name, 'modified': modified})
+        return {'workspaces': workspaces}
 
     def post(self):
         '''
@@ -705,6 +714,34 @@ class MarketplaceRefresh(Resource):
         return {'count': len(recon._module_index)}
 
 api.add_resource(MarketplaceRefresh, '/marketplace/refresh')
+
+
+class MarketplaceInstallAll(Resource):
+
+    def post(self):
+        '''
+        Installs all modules from the marketplace (equivalent to `marketplace install all`)
+        ---
+        responses:
+            200:
+                description: Number of modules installed and any per-module errors
+        '''
+        recon._update_module_index()
+        installed = 0
+        errors = []
+        for module in list(recon._module_index):
+            if module.get('status') not in ('installed', 'disabled'):
+                try:
+                    recon._install_module(module['path'])
+                    installed += 1
+                except Exception as e:
+                    errors.append({'path': module['path'], 'error': str(e)})
+        if installed:
+            recon._do_modules_reload('')
+            recon._update_module_index()
+        return {'installed': installed, 'errors': errors}
+
+api.add_resource(MarketplaceInstallAll, '/marketplace/install-all')
 
 
 class KeyList(Resource):

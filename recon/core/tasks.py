@@ -16,7 +16,7 @@ def run_module(workspace, module):
         recon.start(base.Mode.JOB, workspace=workspace)
         tasks = Tasks(recon)
         # update the task's status
-        tasks.update_task(job.get_id(), status=job.get_status())
+        tasks.update_task(job.id, status=job.get_status().value)
         # execute the task
         module = recon._loaded_modules.get(module)
         module.run()
@@ -28,5 +28,5 @@ def run_module(workspace, module):
         }
     results['summary'] = module._summary_counts
     # update the task's status and results
-    tasks.update_task(job.get_id(), status='finished', result=results)
+    tasks.update_task(job.id, status='finished', result=results)
     return results
