@@ -144,19 +144,29 @@ function TaskPanel({ taskId }: { taskId: string }) {
               )}
             </div>
           ) : (
-            <div className="bg-emerald-950/20 border border-emerald-900/50 rounded p-4">
-              <p className="text-xs font-semibold text-emerald-400 mb-2">Completed in {elapsed}s</p>
-              {task.result.summary && Object.keys(task.result.summary).length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(task.result.summary).map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-400">{k}</span>
-                      <span className="text-xs font-semibold text-zinc-200">{v}</span>
-                    </div>
-                  ))}
+            <div className="flex flex-col gap-3">
+              <div className="bg-emerald-950/20 border border-emerald-900/50 rounded p-4">
+                <p className="text-xs font-semibold text-emerald-400 mb-2">Completed in {elapsed}s</p>
+                {task.result.summary && Object.keys(task.result.summary).length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(task.result.summary).map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-400">{k}</span>
+                        <span className="text-xs font-semibold text-zinc-200">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">No summary data returned.</p>
+                )}
+              </div>
+              {task.result.output && task.result.output.trim() && (
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Output</p>
+                  <pre className="bg-zinc-950 border border-zinc-800 rounded p-3 text-xs text-zinc-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">
+                    {task.result.output}
+                  </pre>
                 </div>
-              ) : (
-                <p className="text-xs text-zinc-500">No summary data returned.</p>
               )}
             </div>
           )}
