@@ -1,4 +1,5 @@
-from flask import Flask, cli, render_template
+from flask import Flask, cli, send_from_directory
+import os
 from flasgger import Swagger
 from recon.core import base
 from recon.core.constants import BANNER_WEB
@@ -13,7 +14,7 @@ cli.show_server_banner = lambda *x: None
 print(BANNER_WEB)
 
 # create an application-wide framework and tasks instance
-recon = base.Recon(check=False, analytics=False, marketplace=False)
+recon = base.Recon(check=False, analytics=False, marketplace=True)
 recon.start(base.Mode.WEB)
 tasks = Tasks(recon)
 
@@ -37,8 +38,7 @@ print((f" * Workspace initialized: {WORKSPACE}"))
 
 def create_app():
 
-    # setting the static_url_path to blank serves static files from the web root
-    app = Flask(__name__, static_url_path='')
+    app = Flask(__name__, static_folder=None)
     app.config.from_object(__name__)
 
     Swagger(app, template_file='definitions.yaml')
@@ -51,9 +51,15 @@ def create_app():
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         return response
 
-    @app.route('/')
-    def index():
-        return render_template('index.html', workspaces=recon._get_workspaces())
+    dist_dir = os.path.join(os.path.dirname(__file__), 'static', 'dist')
+
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def index(path):
+        # Serve real files (JS, CSS, assets) from dist/, fall back to index.html for SPA routing
+        if path and os.path.isfile(os.path.join(dist_dir, path)):
+            return send_from_directory(dist_dir, path)
+        return send_from_directory(dist_dir, 'index.html')
 
     from recon.core.web.api import resources
     app.register_blueprint(resources)
