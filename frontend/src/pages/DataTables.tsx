@@ -17,6 +17,17 @@ function cellStr(v: unknown): string {
   return v === null || v === undefined ? '' : String(v)
 }
 
+function CellValue({ value }: { value: string }) {
+  if (/^https?:\/\//i.test(value)) {
+    return (
+      <a href={value} target="_blank" rel="noreferrer" className="text-brand hover:underline truncate block max-w-xs">
+        {value}
+      </a>
+    )
+  }
+  return <>{value || <span className="text-zinc-700">—</span>}</>
+}
+
 function DataTable({
   columns, rows, onDelete, onNotesEdit,
 }: {
@@ -81,7 +92,7 @@ function DataTable({
                         {cellStr(row[col]) || <span className="text-zinc-700 italic">add note…</span>}
                       </button>
                     ) : (
-                      cellStr(row[col]) || <span className="text-zinc-700">—</span>
+                      <CellValue value={cellStr(row[col])} />
                     )}
                   </td>
                 ))}

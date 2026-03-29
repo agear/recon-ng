@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDashboard, DashboardResponse } from '../api/client'
+import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
 import { HelpButton } from '../components/help/HelpButton'
 
@@ -21,13 +22,17 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const navigate = useNavigate()
+  const { active } = useWorkspace()
 
   useEffect(() => {
+    setLoading(true)
+    setData(null)
+    setError('')
     getDashboard()
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [active])
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">

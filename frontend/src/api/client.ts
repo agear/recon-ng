@@ -56,6 +56,7 @@ export interface TaskResponse {
 export interface TaskResult {
   summary?: Record<string, number>
   error?: { type: string; message: string; traceback: string } | null
+  output?: string
 }
 
 export interface TableResponse {
@@ -244,6 +245,15 @@ export const refreshMarketplace = () =>
 
 export const installAllModules = () =>
   apiFetch<{ installed: number; errors: { path: string; error: string }[] }>('/marketplace/install-all', { method: 'POST' })
+
+export const removeAllModules = () =>
+  apiFetch<{ removed: number; errors: { path: string; error: string }[] }>('/marketplace/remove-all', { method: 'DELETE' })
+
+export const installDeps = (packages: string[]) =>
+  apiFetch<{ success: boolean; output: string; error: string }>('/marketplace/install-deps', {
+    method: 'POST',
+    body: JSON.stringify({ packages }),
+  })
 
 // Keys
 
