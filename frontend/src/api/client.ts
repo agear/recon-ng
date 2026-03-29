@@ -53,8 +53,13 @@ export interface TaskResponse {
   result: TaskResult | null
 }
 
+export interface TaskSummaryEntry {
+  count: number
+  new: number
+}
+
 export interface TaskResult {
-  summary?: Record<string, number>
+  summary?: Record<string, TaskSummaryEntry>
   error?: { type: string; message: string; traceback: string } | null
   output?: string
 }

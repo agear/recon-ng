@@ -5,6 +5,7 @@ import { useTaskPoller } from '../hooks/useTaskPoller'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
+import { ErrorBoundary } from '../components/ui/ErrorBoundary'
 
 function OptionDescription({ description, onInfoClick }: { description: string; onInfoClick: () => void }) {
   // Render "info" inside "(see 'info' for details)" as a clickable button
@@ -148,16 +149,19 @@ function TaskPanel({ taskId }: { taskId: string }) {
               <div className="bg-emerald-950/20 border border-emerald-900/50 rounded p-4">
                 <p className="text-xs font-semibold text-emerald-400 mb-2">Completed in {elapsed}s</p>
                 {task.result.summary && Object.keys(task.result.summary).length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(task.result.summary).map(([k, v]) => (
-                      <div key={k} className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-400">{k}</span>
-                        <span className="text-xs font-semibold text-zinc-200">{v}</span>
+                  <div className="flex flex-col gap-1">
+                    {Object.entries(task.result.summary).map(([table, counts]) => (
+                      <div key={table} className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-400">{table}</span>
+                        <span className="text-xs font-semibold text-zinc-200">
+                          {counts.count} total
+                          {counts.new > 0 && <span className="text-emerald-400 ml-1">({counts.new} new)</span>}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-zinc-500">No summary data returned.</p>
+                  <p className="text-xs text-zinc-500">No new records found.</p>
                 )}
               </div>
               {task.result.output && task.result.output.trim() && (
@@ -328,7 +332,7 @@ export function ModuleDetail() {
       )}
 
       {/* Task output */}
-      {taskId && <TaskPanel taskId={taskId} />}
+      {taskId && <ErrorBoundary><TaskPanel taskId={taskId} /></ErrorBoundary>}
     </div>
   )
 }
