@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { getWorkspace, deleteWorkspace, updateWorkspaceOptions, WorkspaceResponse, WorkspaceOption } from '../api/client'
+import { useEffect, useState } from 'react'
+import { getWorkspace, getWorkspaces, deleteWorkspace, updateWorkspaceOptions, WorkspaceResponse, WorkspaceOption, WorkspaceSummary } from '../api/client'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
@@ -53,7 +53,7 @@ function OptionsForm({ workspace, options, onSave }: { workspace: string; option
   )
 }
 
-function WorkspaceRow({ name }: { name: string }) {
+function WorkspaceRow({ name, modified }: { name: string; modified: string | null }) {
   const { active, setActive, refresh } = useWorkspace()
   const isActive = name === active
   const [detail, setDetail] = useState<WorkspaceResponse | null>(null)
@@ -91,9 +91,10 @@ function WorkspaceRow({ name }: { name: string }) {
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-zinc-800/30 transition-colors"
         onClick={expand}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <span className="text-sm text-zinc-200 font-medium">{name}</span>
           {isActive && <span className="badge-green">active</span>}
+          {modified && <span className="text-xs text-zinc-600 font-mono">{modified}</span>}
         </div>
         <div className="flex items-center gap-2">
           {!isActive && (
@@ -153,6 +154,14 @@ function WorkspaceRow({ name }: { name: string }) {
 
 export function Workspaces() {
   const { workspaces } = useWorkspace()
+  const [summaries, setSummaries] = useState<WorkspaceSummary[]>([])
+
+  useEffect(() => {
+    getWorkspaces().then(d => setSummaries(d.workspaces))
+  }, [workspaces])
+
+  const modifiedFor = (name: string) =>
+    summaries.find(s => s.name === name)?.modified ?? null
 
   return (
     <div className="p-8 max-w-3xl">
@@ -179,7 +188,7 @@ export function Workspaces() {
         {workspaces.length === 0 ? (
           <p className="text-sm text-zinc-600">No workspaces found.</p>
         ) : (
-          workspaces.map(w => <WorkspaceRow key={w} name={w} />)
+          workspaces.map(w => <WorkspaceRow key={w} name={w} modified={modifiedFor(w)} />)
         )}
       </div>
     </div>

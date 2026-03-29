@@ -29,7 +29,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const refresh = async () => {
     const data = await getWorkspaces()
-    setWorkspaces(data.workspaces)
+    setWorkspaces(data.workspaces.map(w => w.name))
     setLoading(false)
   }
 

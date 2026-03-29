@@ -93,8 +93,13 @@ export const getDashboard = () =>
 
 // Workspaces
 
+export interface WorkspaceSummary {
+  name: string
+  modified: string | null
+}
+
 export const getWorkspaces = () =>
-  apiFetch<{ workspaces: string[] }>('/workspaces/')
+  apiFetch<{ workspaces: WorkspaceSummary[] }>('/workspaces/')
 
 export const getWorkspace = (name: string) =>
   apiFetch<WorkspaceResponse>(`/workspaces/${name}`)
@@ -236,6 +241,9 @@ export const removeModule = (path: string) =>
 
 export const refreshMarketplace = () =>
   apiFetch<{ count: number }>('/marketplace/refresh', { method: 'POST' })
+
+export const installAllModules = () =>
+  apiFetch<{ installed: number; errors: { path: string; error: string }[] }>('/marketplace/install-all', { method: 'POST' })
 
 // Keys
 
