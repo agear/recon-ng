@@ -1,7 +1,7 @@
 from recon.core import base
+from recon.core import framework
 from recon.core.web.db import Tasks
 from rq import get_current_job
-import contextlib
 import io
 import re
 import traceback
@@ -18,6 +18,7 @@ def run_module(workspace, module_path):
 
     results = {}
     output_buffer = io.StringIO()
+    tasks = None
     module = None
     try:
         # instantiate important objects
@@ -27,20 +28,27 @@ def run_module(workspace, module_path):
         tasks = Tasks(recon)
         # update the task's status
         tasks.update_task(job.id, status=job.get_status().value)
-        # execute the task, capturing all print() output
+        # execute the task; base.py replaces the built-in print() with
+        # spool_print(), which in JOB mode suppresses terminal output but
+        # writes to Framework._spool when it is set. Point _spool at our
+        # StringIO buffer so all output/alert/verbose calls are captured.
         module = recon._loaded_modules.get(module_path)
         if module is None:
             raise ValueError(f"Module '{module_path}' not found in loaded modules.")
-        with contextlib.redirect_stdout(output_buffer):
+        framework.Framework._spool = output_buffer
+        try:
             module.run()
+        finally:
+            framework.Framework._spool = None
     except Exception as e:
         results['error'] = {
             'type': str(type(e)),
             'message': str(e),
             'traceback': traceback.format_exc(),
         }
-    results['summary'] = module._summary_counts if module is not None else {}
+    results['summary'] = getattr(module, '_summary_counts', {})
     results['output'] = _strip_ansi(output_buffer.getvalue())
     # update the task's status and results
-    tasks.update_task(job.id, status='finished', result=results)
+    if tasks is not None:
+        tasks.update_task(job.id, status='finished', result=results)
     return results
