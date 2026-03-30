@@ -194,6 +194,7 @@ export function ModuleDetail() {
   const [meta, setMeta] = useState<ModuleMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notFound, setNotFound] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -204,13 +205,17 @@ export function ModuleDetail() {
   useEffect(() => {
     setLoading(true)
     setError('')
+    setNotFound(false)
     setTaskId(null)
     getModule(modulePath)
       .then(data => {
         setMeta(data)
         setValues(Object.fromEntries((data.options ?? []).map(o => [o.name, o.value ?? ''])))
       })
-      .catch(e => setError(e.message))
+      .catch(e => {
+        if (e.message.startsWith('404')) setNotFound(true)
+        else setError(e.message)
+      })
       .finally(() => setLoading(false))
   }, [modulePath])
 
@@ -245,6 +250,18 @@ export function ModuleDetail() {
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>
+  if (notFound) return (
+    <div className="p-8 max-w-lg">
+      <div className="card p-6 flex flex-col gap-3">
+        <p className="text-sm font-semibold text-zinc-300">Module not installed</p>
+        <p className="text-xs text-zinc-500 font-mono">{modulePath}</p>
+        <p className="text-sm text-zinc-400">This module is not currently installed. Install it from the Marketplace to configure and run it.</p>
+        <button onClick={() => navigate(`/marketplace`)} className="text-sm text-brand hover:underline text-left">
+          Go to Marketplace →
+        </button>
+      </div>
+    </div>
+  )
   if (error) return <div className="p-8 text-red-400 text-sm">{error}</div>
   if (!meta) return null
 

@@ -73,7 +73,7 @@ export function Modules() {
               <li><span className="font-mono text-zinc-300">recon/hosts-ports/shodan_ip</span> — takes hosts, outputs open ports</li>
               <li><span className="font-mono text-zinc-300">recon/domains-contacts/hunter_io</span> — takes domains, outputs contacts</li>
             </ul>
-            <p className="text-xs text-zinc-500">Only installed modules appear here. Visit the <strong className="text-zinc-300">Marketplace</strong> to install more.</p>
+            <p className="text-xs text-zinc-500">Only installed modules appear here. Visit the <button onClick={() => navigate('/marketplace')} className="text-brand hover:underline focus:outline-none">Marketplace</button> to install more.</p>
           </HelpButton>
         </div>
         <p className="text-sm text-zinc-500 mt-1">{modules.length} modules loaded</p>
