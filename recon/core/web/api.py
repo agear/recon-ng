@@ -817,6 +817,39 @@ class MarketplaceDepsInstall(Resource):
 api.add_resource(MarketplaceDepsInstall, '/marketplace/install-deps')
 
 
+class MarketplaceCheckDeps(Resource):
+
+    def post(self):
+        '''
+        Checks whether Python packages are importable in the current environment
+        ---
+        parameters:
+          - name: body
+            in: body
+            schema:
+                properties:
+                    packages:
+                        type: array
+                        items:
+                            type: string
+                required:
+                - packages
+        responses:
+            200:
+                description: satisfaction status per package
+        '''
+        import importlib.util
+        packages = (request.json or {}).get('packages', [])
+        result = {}
+        for pkg in packages:
+            # importlib uses underscores; pip names use hyphens
+            mod_name = pkg.replace('-', '_').split('[')[0]
+            result[pkg] = importlib.util.find_spec(mod_name) is not None
+        return result
+
+api.add_resource(MarketplaceCheckDeps, '/marketplace/check-deps')
+
+
 class KeyList(Resource):
 
     def get(self):
