@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  getTables, getTable, getExports, exportTableUrl,
+  getTables, getTable, getExports, exportTableUrl, getModules,
   getTableSchema, insertRow, deleteRow, updateNotes, runQuery,
   TableResponse, ColumnSchema,
 } from '../api/client'
@@ -17,7 +17,8 @@ function cellStr(v: unknown): string {
   return v === null || v === undefined ? '' : String(v)
 }
 
-function CellValue({ value }: { value: string }) {
+function CellValue({ value, colName }: { value: string; colName?: string }) {
+  if (!value) return <span className="text-zinc-700">—</span>
   if (/^https?:\/\//i.test(value)) {
     return (
       <a href={value} target="_blank" rel="noreferrer" className="text-brand hover:underline truncate block max-w-xs">
@@ -25,17 +26,33 @@ function CellValue({ value }: { value: string }) {
       </a>
     )
   }
-  return <>{value || <span className="text-zinc-700">—</span>}</>
+  if (colName === 'host') {
+    return (
+      <a href={`https://${value}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+        {value}
+      </a>
+    )
+  }
+  if (colName === 'ip_address') {
+    return (
+      <a href={`https://www.shodan.io/host/${value}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+        {value}
+      </a>
+    )
+  }
+  return <>{value}</>
 }
 
 function DataTable({
-  columns, rows, onDelete, onNotesEdit,
+  columns, rows, onDelete, onNotesEdit, installedModules,
 }: {
   columns: string[]
   rows: Record<string, unknown>[]
   onDelete: (rowid: number) => void
   onNotesEdit: (rowid: number, current: string) => void
+  installedModules?: Set<string>
 }) {
+  const navigate = useNavigate()
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [filter, setFilter] = useState('')
@@ -81,21 +98,32 @@ function DataTable({
               <tr><td colSpan={visibleCols.length + 1} className="px-3 py-6 text-center text-zinc-500">No records.</td></tr>
             ) : sorted.map((row, i) => (
               <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 group transition-colors">
-                {visibleCols.map(col => (
-                  <td key={col} className="px-3 py-2 text-zinc-300 max-w-xs truncate">
-                    {col === 'notes' ? (
-                      <button
-                        className="text-left w-full hover:text-brand transition-colors"
-                        onClick={() => onNotesEdit(row.rowid as number, cellStr(row[col]))}
-                        title="Edit notes"
-                      >
-                        {cellStr(row[col]) || <span className="text-zinc-700 italic">add note…</span>}
-                      </button>
-                    ) : (
-                      <CellValue value={cellStr(row[col])} />
-                    )}
-                  </td>
-                ))}
+                {visibleCols.map(col => {
+                  const val = cellStr(row[col])
+                  return (
+                    <td key={col} className="px-3 py-2 text-zinc-300 max-w-xs truncate">
+                      {col === 'notes' ? (
+                        <button
+                          className="text-left w-full hover:text-brand transition-colors"
+                          onClick={() => onNotesEdit(row.rowid as number, val)}
+                          title="Edit notes"
+                        >
+                          {val || <span className="text-zinc-700 italic">add note…</span>}
+                        </button>
+                      ) : col === 'module' && val ? (
+                        <button
+                          className="text-brand hover:underline font-mono text-left"
+                          onClick={() => navigate(installedModules?.has(val) ? `/modules/${val}` : `/marketplace`)}
+                          title={installedModules?.has(val) ? 'Open module' : 'Not installed — go to marketplace'}
+                        >
+                          {val}
+                        </button>
+                      ) : (
+                        <CellValue value={val} colName={col} />
+                      )}
+                    </td>
+                  )
+                })}
                 <td className="px-3 py-2 text-right">
                   <button
                     onClick={() => onDelete(row.rowid as number)}
@@ -336,6 +364,7 @@ export function DataTables() {
 
   const [tables, setTables] = useState<string[]>([])
   const [exports, setExports] = useState<string[]>([])
+  const [installedModules, setInstalledModules] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<string | null>(tableParam ?? null)
   const [tableData, setTableData] = useState<TableResponse | null>(null)
   const [schema, setSchema] = useState<ColumnSchema[]>([])
@@ -348,8 +377,12 @@ export function DataTables() {
   const [tab, setTab] = useState<Tab>('data')
 
   useEffect(() => {
-    Promise.all([getTables(), getExports()])
-      .then(([t, e]) => { setTables(t.tables); setExports(e.exports) })
+    Promise.all([getTables(), getExports(), getModules()])
+      .then(([t, e, mods]) => {
+        setTables(t.tables)
+        setExports(e.exports)
+        setInstalledModules(new Set(mods.modules))
+      })
       .finally(() => setLoadingList(false))
   }, [])
 
@@ -522,6 +555,7 @@ UNION SELECT 'contacts', COUNT(*) FROM contacts`}</pre>
                 rows={tableData.rows}
                 onDelete={handleDelete}
                 onNotesEdit={(rowid, notes) => setNotesTarget({ rowid, notes })}
+                installedModules={installedModules}
               />
             </div>
           ) : null
