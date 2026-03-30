@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMarketplace, installModule, removeModule, refreshMarketplace, installAllModules, removeAllModules, installDeps, MarketplaceModule } from '../api/client'
+import { getMarketplace, getKeys, checkDeps, installModule, removeModule, refreshMarketplace, installAllModules, removeAllModules, installDeps, addKey, MarketplaceModule } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
@@ -14,7 +14,7 @@ const STATUS_BADGE: Record<Status, string> = {
   'not installed': 'badge-zinc',
 }
 
-function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void }) {
+function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void; storedKeys: Set<string>; depsSatisfied?: Record<string, boolean> }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -22,9 +22,15 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
   const [showKeys, setShowKeys] = useState(false)
   const [installingDeps, setInstallingDeps] = useState(false)
   const [depsResult, setDepsResult] = useState<{ success: boolean; output: string; error: string } | null>(null)
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({})
+  const [keyAdding, setKeyAdding] = useState<Record<string, boolean>>({})
+  const [keyErrors, setKeyErrors] = useState<Record<string, string>>({})
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
   const isInstalled = module.status === 'installed' || module.status === 'outdated' || module.status === 'disabled'
   const hasDeps = module.dependencies?.length > 0
   const hasKeys = module.required_keys?.length > 0
+  const allKeysSatisfied = hasKeys && module.required_keys.every(k => storedKeys.has(k) || savedKeys.has(k))
+  const allDepsSatisfied = hasDeps && depsSatisfied != null && module.dependencies.every(d => depsSatisfied[d])
 
   const handleInstall = async () => {
     setBusy(true)
@@ -68,13 +74,21 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
               <span className={STATUS_BADGE[module.status]}>{module.status}</span>
               {module.status === 'outdated' && <span className="badge-amber">update available</span>}
               {hasDeps && (
-                <button onClick={() => setShowDeps(true)} className="badge-zinc hover:bg-zinc-600 transition-colors cursor-pointer" title="Has dependencies — click for details">
+                <button
+                  onClick={() => setShowDeps(true)}
+                  className={`${allDepsSatisfied ? 'badge-green' : 'badge-zinc'} hover:opacity-80 transition-opacity cursor-pointer`}
+                  title={allDepsSatisfied ? 'All dependencies satisfied' : 'Has dependencies — click for details'}
+                >
                   dependencies
                 </button>
               )}
               {hasKeys && (
-                <button onClick={() => setShowKeys(true)} className="badge-zinc hover:bg-zinc-600 transition-colors cursor-pointer" title="Requires API key — click for details">
-                  🔑 key required
+                <button
+                  onClick={() => setShowKeys(true)}
+                  className={`${allKeysSatisfied ? 'badge-green' : 'badge-amber'} hover:opacity-80 transition-opacity cursor-pointer`}
+                  title={allKeysSatisfied ? 'All required keys are present' : 'Requires API key — click for details'}
+                >
+                  🔑 {allKeysSatisfied ? 'keys ok' : 'key required'}
                 </button>
               )}
             </div>
@@ -147,12 +161,64 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
         <Modal title={`Required API Keys — ${module.path}`} onClose={() => setShowKeys(false)}>
           <div className="flex flex-col gap-3 text-sm text-zinc-300">
             <p className="text-xs text-zinc-500">This module will not run until the following keys are present in the keystore:</p>
-            <div className="flex flex-col gap-1">
-              {module.required_keys.map(key => (
-                <div key={key} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
-                  <span className="font-mono text-xs text-brand">{key}</span>
-                </div>
-              ))}
+            <div className="flex flex-col gap-2">
+              {module.required_keys.map(key => {
+                const isStored = storedKeys.has(key) || savedKeys.has(key)
+                return (
+                  <div key={key} className="flex flex-col gap-1.5 bg-zinc-950 rounded px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-brand flex-1">{key}</span>
+                      {isStored && <span className="badge-green text-xs">stored</span>}
+                    </div>
+                    {!isStored && (
+                      <div className="flex gap-2">
+                        <input
+                          className="input text-xs py-1 flex-1"
+                          type="password"
+                          placeholder="Paste key value…"
+                          value={keyInputs[key] ?? ''}
+                          onChange={e => setKeyInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                          onKeyDown={async e => {
+                            if (e.key === 'Enter' && keyInputs[key]?.trim()) {
+                              setKeyAdding(prev => ({ ...prev, [key]: true }))
+                              setKeyErrors(prev => ({ ...prev, [key]: '' }))
+                              try {
+                                await addKey(key, keyInputs[key].trim())
+                                setSavedKeys(prev => new Set([...prev, key]))
+                                setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                              } catch (err) {
+                                setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
+                              } finally {
+                                setKeyAdding(prev => ({ ...prev, [key]: false }))
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          className="btn-primary text-xs py-1 px-3"
+                          disabled={!keyInputs[key]?.trim() || keyAdding[key]}
+                          onClick={async () => {
+                            setKeyAdding(prev => ({ ...prev, [key]: true }))
+                            setKeyErrors(prev => ({ ...prev, [key]: '' }))
+                            try {
+                              await addKey(key, keyInputs[key].trim())
+                              setSavedKeys(prev => new Set([...prev, key]))
+                              setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                            } catch (err) {
+                              setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
+                            } finally {
+                              setKeyAdding(prev => ({ ...prev, [key]: false }))
+                            }
+                          }}
+                        >
+                          {keyAdding[key] ? <Spinner size="sm" /> : 'Save'}
+                        </button>
+                      </div>
+                    )}
+                    {keyErrors[key] && <p className="text-xs text-red-400">{keyErrors[key]}</p>}
+                  </div>
+                )
+              })}
             </div>
             <button onClick={() => { setShowKeys(false); navigate('/keys') }} className="text-xs text-brand hover:underline text-left mt-1">
               Go to API Keys page →
@@ -166,6 +232,8 @@ function MarketplaceRow({ module, onUpdate }: { module: MarketplaceModule; onUpd
 
 export function Marketplace() {
   const [modules, setModules] = useState<MarketplaceModule[]>([])
+  const [storedKeys, setStoredKeys] = useState<Set<string>>(new Set())
+  const [depsSatisfied, setDepsSatisfied] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showInstallAll, setShowInstallAll] = useState(false)
@@ -181,8 +249,16 @@ export function Marketplace() {
 
   const load = (q?: string) => {
     setLoading(true)
-    getMarketplace(q)
-      .then(d => setModules(d.modules))
+    Promise.all([getMarketplace(q), getKeys()])
+      .then(([mkt, keys]) => {
+        setModules(mkt.modules)
+        setStoredKeys(new Set(keys.keys.filter(k => k.value).map(k => k.name)))
+        // Collect all unique dependencies across all marketplace modules
+        const allDeps = [...new Set(mkt.modules.flatMap(m => m.dependencies ?? []))]
+        if (allDeps.length > 0) {
+          checkDeps(allDeps).then(setDepsSatisfied).catch(() => {})
+        }
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }
@@ -326,7 +402,7 @@ export function Marketplace() {
       ) : (
         <div className="card overflow-hidden">
           {filtered.map(m => (
-            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} />
+            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} storedKeys={storedKeys} depsSatisfied={depsSatisfied} />
           ))}
         </div>
       )}
