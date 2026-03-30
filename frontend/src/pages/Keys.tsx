@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { getKeys, addKey, deleteKey, KeyRecord } from '../api/client'
+import { useEffect, useMemo, useState } from 'react'
+import { getKeys, addKey, deleteKey, getMarketplace, KeyRecord } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
@@ -123,16 +123,40 @@ export function Keys() {
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
   const [toDelete, setToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [inlineValues, setInlineValues] = useState<Record<string, string>>({})
+  const [inlineSaving, setInlineSaving] = useState<Record<string, boolean>>({})
+  const [inlineErrors, setInlineErrors] = useState<Record<string, string>>({})
+  const [requiredByInstalled, setRequiredByInstalled] = useState<Set<string>>(new Set())
+  const [showAll, setShowAll] = useState(false)
 
   const load = () => {
     setLoading(true)
-    getKeys()
-      .then(d => setKeys(d.keys))
+    Promise.all([getKeys(), getMarketplace()])
+      .then(([keysData, mkt]) => {
+        setKeys(keysData.keys)
+        const installedKeys = new Set(
+          mkt.modules
+            .filter(m => m.status === 'installed' || m.status === 'outdated' || m.status === 'disabled')
+            .flatMap(m => m.required_keys ?? [])
+        )
+        setRequiredByInstalled(installedKeys)
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }
 
   useEffect(load, [])
+
+  const visibleKeys = useMemo(() => {
+    if (showAll) return keys
+    // Show stored keys + keys required by installed modules (as "not set" placeholder rows)
+    const storedNames = new Set(keys.map(k => k.name))
+    const extraRows: KeyRecord[] = [...requiredByInstalled]
+      .filter(name => !storedNames.has(name))
+      .map(name => ({ name, value: '' }))
+    const filtered = keys.filter(k => k.value || requiredByInstalled.has(k.name))
+    return [...filtered, ...extraRows].sort((a, b) => a.name.localeCompare(b.name))
+  }, [keys, requiredByInstalled, showAll])
 
   const handleAdd = async () => {
     if (!newName.trim() || !newValue.trim()) return
@@ -160,6 +184,22 @@ export function Keys() {
       load()
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleInlineSave = async (name: string) => {
+    const value = inlineValues[name]?.trim()
+    if (!value) return
+    setInlineSaving(prev => ({ ...prev, [name]: true }))
+    setInlineErrors(prev => ({ ...prev, [name]: '' }))
+    try {
+      await addKey(name, value)
+      setInlineValues(prev => ({ ...prev, [name]: '' }))
+      load()
+    } catch (e) {
+      setInlineErrors(prev => ({ ...prev, [name]: e instanceof Error ? e.message : 'Failed' }))
+    } finally {
+      setInlineSaving(prev => ({ ...prev, [name]: false }))
     }
   }
 
@@ -194,12 +234,21 @@ export function Keys() {
         <div className="flex justify-center py-12"><Spinner size="lg" /></div>
       ) : error ? (
         <p className="text-red-400 text-sm">{error}</p>
-      ) : keys.length === 0 ? (
+      ) : visibleKeys.length === 0 ? (
         <div className="card p-8 text-center">
           <p className="text-zinc-500 text-sm">No API keys stored.</p>
           <p className="text-zinc-600 text-xs mt-1">Add keys to enable modules that require external APIs.</p>
         </div>
       ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-zinc-600">
+              {showAll ? `Showing all ${keys.length} keys` : `Showing ${visibleKeys.length} keys required by installed modules`}
+            </p>
+            <button className="text-xs text-brand hover:underline" onClick={() => setShowAll(v => !v)}>
+              {showAll ? 'Show relevant only' : `Show all (${keys.length})`}
+            </button>
+          </div>
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -210,7 +259,7 @@ export function Keys() {
               </tr>
             </thead>
             <tbody>
-              {keys.map(k => (
+              {visibleKeys.map(k => (
                 <tr key={k.name} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
                   <td className="px-4 py-3">
                     {KEY_INFO[k.name] ? (
@@ -228,7 +277,26 @@ export function Keys() {
                   <td className="px-4 py-3 font-mono text-xs text-zinc-400">
                     {k.value
                       ? (revealed[k.name] ? k.value : mask(k.value))
-                      : <span className="text-zinc-600">not set</span>
+                      : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            className="input text-xs py-0.5 w-48"
+                            type="password"
+                            placeholder="Paste key value…"
+                            value={inlineValues[k.name] ?? ''}
+                            onChange={e => setInlineValues(prev => ({ ...prev, [k.name]: e.target.value }))}
+                            onKeyDown={e => e.key === 'Enter' && handleInlineSave(k.name)}
+                          />
+                          <button
+                            className="btn-primary py-0.5 px-2 text-xs"
+                            disabled={!inlineValues[k.name]?.trim() || inlineSaving[k.name]}
+                            onClick={() => handleInlineSave(k.name)}
+                          >
+                            {inlineSaving[k.name] ? <Spinner size="sm" /> : 'Save'}
+                          </button>
+                          {inlineErrors[k.name] && <span className="text-red-400 text-xs">{inlineErrors[k.name]}</span>}
+                        </div>
+                      )
                     }
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -254,6 +322,7 @@ export function Keys() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showAdd && (
