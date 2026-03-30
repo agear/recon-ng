@@ -260,6 +260,12 @@ export const installDeps = (packages: string[]) =>
     body: JSON.stringify({ packages }),
   })
 
+export const checkDeps = (packages: string[]) =>
+  apiFetch<Record<string, boolean>>('/marketplace/check-deps', {
+    method: 'POST',
+    body: JSON.stringify({ packages }),
+  })
+
 // Keys
 
 export const getKeys = () =>
