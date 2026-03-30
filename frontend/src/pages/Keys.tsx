@@ -4,7 +4,114 @@ import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
 
+interface KeyInfo {
+  label: string
+  description: string
+  url: string
+  urlLabel?: string
+}
+
+const KEY_INFO: Record<string, KeyInfo> = {
+  bing_api: {
+    label: 'Bing API Key',
+    description: 'Sign up for the Bing Search API via Microsoft Cognitive Services. After subscribing, the key will be available on the "My Account" tab under the "Bing Search" heading.',
+    url: 'https://www.microsoft.com/cognitive-services/en-us/bing-web-search-api',
+    urlLabel: 'Sign up for Bing Search API',
+  },
+  builtwith_api: {
+    label: 'BuiltWith API Key',
+    description: 'Sign up for a free account. After signing in the API key will be displayed in the upper right of the screen.',
+    url: 'https://api.builtwith.com/',
+    urlLabel: 'api.builtwith.com',
+  },
+  censysio_id: {
+    label: 'Censys API ID',
+    description: 'Register for a free (rate-limited) account. After registering, view your API credentials on the account API page.',
+    url: 'https://censys.io/register',
+    urlLabel: 'censys.io/register',
+  },
+  censysio_secret: {
+    label: 'Censys API Secret',
+    description: 'Obtained together with the Censys API ID. View your credentials on the Censys account API page.',
+    url: 'https://censys.io/account/api',
+    urlLabel: 'censys.io/account/api',
+  },
+  flickr_api: {
+    label: 'Flickr API Key',
+    description: 'Create a Flickr account, then apply for a non-commercial API key. After approval you will receive a 32-character Key — recon-ng uses the Key only (not the Secret).',
+    url: 'https://www.flickr.com/services/apps/create/apply/',
+    urlLabel: 'Apply for Flickr API key',
+  },
+  fullcontact_api: {
+    label: 'FullContact API Key',
+    description: 'Create a FullContact account. The API key will be available in your dashboard after registration.',
+    url: 'https://dashboard.fullcontact.com/consents',
+    urlLabel: 'dashboard.fullcontact.com',
+  },
+  google_api: {
+    label: 'Google API Key',
+    description: 'Create an API project in Google Cloud Console. The key will be in the Credentials section. Be sure to enable the APIs your modules need: Custom Search, YouTube Data, and/or Maps JavaScript.',
+    url: 'https://console.developers.google.com/apis/dashboard',
+    urlLabel: 'Google Cloud Console',
+  },
+  google_cse: {
+    label: 'Google Custom Search Engine ID',
+    description: 'Create a Custom Search Engine (CSE). The CSE ID appears in the management console. Configure it to search the entire web for best results — otherwise results are limited to specified domains.',
+    url: 'https://programmablesearchengine.google.com/cse/all',
+    urlLabel: 'Create a Custom Search Engine',
+  },
+  github_api: {
+    label: 'GitHub API Key',
+    description: 'Generate a personal access token. No special permissions are required — just generate the token and copy it.',
+    url: 'https://github.com/settings/tokens/new',
+    urlLabel: 'github.com/settings/tokens/new',
+  },
+  hashes_api: {
+    label: 'Hashes.org API Key',
+    description: 'Register an account and confirm via email. After logging in, visit your settings page — the API key will be listed there.',
+    url: 'https://hashes.org/register.php',
+    urlLabel: 'hashes.org/register.php',
+  },
+  ipinfodb_api: {
+    label: 'IPInfoDB API Key',
+    description: 'Create a free account and log in. The API key will be available on the "Account" tab.',
+    url: 'http://ipinfodb.com/register.php',
+    urlLabel: 'ipinfodb.com/register.php',
+  },
+  shodan_api: {
+    label: 'Shodan API Key',
+    description: 'Create a Shodan account or sign in. The API key will appear on the right side of your account page. An upgraded account is required for advanced search features.',
+    url: 'https://www.shodan.io/',
+    urlLabel: 'shodan.io',
+  },
+  twitter_api: {
+    label: 'Twitter Consumer Key',
+    description: 'Create a Twitter developer application. The Consumer Key will be available on the application management page.',
+    url: 'https://developer.twitter.com/en/apps',
+    urlLabel: 'developer.twitter.com/en/apps',
+  },
+  twitter_secret: {
+    label: 'Twitter Consumer Secret',
+    description: 'Obtained alongside the Twitter Consumer Key. See the application management page for the app you created.',
+    url: 'https://developer.twitter.com/en/apps',
+    urlLabel: 'developer.twitter.com/en/apps',
+  },
+  virustotal_api: {
+    label: 'VirusTotal API Key',
+    description: 'Register for a free account and activate via email. After logging in, go to your profile → "My API Key". A free public API key is sufficient for most modules.',
+    url: 'https://www.virustotal.com/gui/join-us',
+    urlLabel: 'virustotal.com/gui/join-us',
+  },
+  hunter_io: {
+    label: 'Hunter.io API Key',
+    description: 'Sign up for a Hunter.io account. The API key is available on the API Keys page in your dashboard.',
+    url: 'https://hunter.io/api-keys',
+    urlLabel: 'hunter.io/api-keys',
+  },
+}
+
 export function Keys() {
+  const [keyInfo, setKeyInfo] = useState<KeyInfo | null>(null)
   const [keys, setKeys] = useState<KeyRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -105,7 +212,19 @@ export function Keys() {
             <tbody>
               {keys.map(k => (
                 <tr key={k.name} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
-                  <td className="px-4 py-3 text-zinc-200 font-medium">{k.name}</td>
+                  <td className="px-4 py-3">
+                    {KEY_INFO[k.name] ? (
+                      <button
+                        className="text-zinc-200 font-medium hover:text-brand transition-colors text-left"
+                        onClick={() => setKeyInfo(KEY_INFO[k.name])}
+                        title="View setup instructions"
+                      >
+                        {k.name}
+                      </button>
+                    ) : (
+                      <span className="text-zinc-200 font-medium">{k.name}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-400">
                     {k.value
                       ? (revealed[k.name] ? k.value : mask(k.value))
@@ -160,6 +279,23 @@ export function Keys() {
               <input className="input" type="password" placeholder="Paste your API key" value={newValue} onChange={e => setNewValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} />
             </div>
             {addError && <p className="text-xs text-red-400">{addError}</p>}
+          </div>
+        </Modal>
+      )}
+
+      {keyInfo && (
+        <Modal title={keyInfo.label} onClose={() => setKeyInfo(null)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-zinc-300">{keyInfo.description}</p>
+            <a
+              href={keyInfo.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-brand hover:underline"
+            >
+              {keyInfo.urlLabel ?? keyInfo.url}
+              <span className="text-xs">↗</span>
+            </a>
           </div>
         </Modal>
       )}
