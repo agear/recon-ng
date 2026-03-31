@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  getTables, getTable, getExports, exportTableUrl, getModules,
+  getTables, getTable, getExports, exportTableUrl, getModules, getMarketplace,
   getTableSchema, insertRow, deleteRow, updateNotes, runQuery,
-  TableResponse, ColumnSchema,
+  installModule, TableResponse, ColumnSchema,
 } from '../api/client'
+import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
@@ -56,6 +57,19 @@ function DataTable({
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [filter, setFilter] = useState('')
+  const [uninstalledModule, setUninstalledModule] = useState<string | null>(null)
+  const [uninstalledModulePath, setUninstalledModulePath] = useState<string | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState('')
+
+  // When an uninstalled module short-name is set, look up its full marketplace path
+  useEffect(() => {
+    if (!uninstalledModule) { setUninstalledModulePath(null); return }
+    getMarketplace(uninstalledModule).then(r => {
+      const match = r.modules.find(m => m.path === uninstalledModule || m.path.endsWith('/' + uninstalledModule))
+      setUninstalledModulePath(match?.path ?? null)
+    }).catch(() => setUninstalledModulePath(null))
+  }, [uninstalledModule])
 
   const visibleCols = columns.filter(c => c !== 'rowid')
 
@@ -113,8 +127,13 @@ function DataTable({
                       ) : col === 'module' && val ? (
                         <button
                           className="text-brand hover:underline font-mono text-left"
-                          onClick={() => navigate(installedModules?.has(val) ? `/modules/${val}` : `/marketplace`)}
-                          title={installedModules?.has(val) ? 'Open module' : 'Not installed — go to marketplace'}
+                          onClick={() => {
+                            // DB stores only the last path segment; find the full path in installedModules
+                            const fullPath = [...(installedModules ?? new Set())].find(p => p === val || p.endsWith('/' + val))
+                            if (fullPath) navigate(`/modules/${fullPath}`)
+                            else setUninstalledModule(val)
+                          }}
+                          title={[...(installedModules ?? new Set())].some(p => p === val || p.endsWith('/' + val)) ? 'Open module' : 'Not installed — click to install'}
                         >
                           {val}
                         </button>
@@ -139,6 +158,48 @@ function DataTable({
         </table>
       </div>
       <p className="text-xs text-zinc-600">{sorted.length} of {rows.length} rows</p>
+
+      {uninstalledModule && (
+        <Modal
+          title="Module not installed"
+          onClose={() => { setUninstalledModule(null); setInstallError('') }}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-zinc-500 font-mono">{uninstalledModulePath ?? uninstalledModule}</p>
+            <p className="text-sm text-zinc-400">This module is not currently installed.</p>
+            <div className="flex items-center gap-3">
+              {uninstalledModulePath && (
+                <button
+                  className="btn-primary text-sm"
+                  disabled={installing}
+                  onClick={async () => {
+                    setInstalling(true)
+                    setInstallError('')
+                    try {
+                      await installModule(uninstalledModulePath)
+                      setInstalling(false)
+                      setUninstalledModule(null)
+                      navigate(`/modules/${uninstalledModulePath}`)
+                    } catch (e) {
+                      setInstallError(e instanceof Error ? e.message : 'Install failed')
+                      setInstalling(false)
+                    }
+                  }}
+                >
+                  {installing ? <Spinner size="sm" /> : '⬇ Install Module'}
+                </button>
+              )}
+              <button
+                className="text-sm text-brand hover:underline"
+                onClick={() => navigate(`/marketplace?q=${encodeURIComponent(uninstalledModule)}`)}
+              >
+                Go to Marketplace →
+              </button>
+            </div>
+            {installError && <p className="text-xs text-red-400">{installError}</p>}
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -362,6 +423,8 @@ export function DataTables() {
   const { table: tableParam } = useParams<{ table: string }>()
   const navigate = useNavigate()
 
+  const { active } = useWorkspace()
+
   const [tables, setTables] = useState<string[]>([])
   const [exports, setExports] = useState<string[]>([])
   const [installedModules, setInstalledModules] = useState<Set<string>>(new Set())
@@ -377,6 +440,8 @@ export function DataTables() {
   const [tab, setTab] = useState<Tab>('data')
 
   useEffect(() => {
+    setLoadingList(true)
+    setTableData(null)
     Promise.all([getTables(), getExports(), getModules()])
       .then(([t, e, mods]) => {
         setTables(t.tables)
@@ -384,7 +449,7 @@ export function DataTables() {
         setInstalledModules(new Set(mods.modules))
       })
       .finally(() => setLoadingList(false))
-  }, [])
+  }, [active])
 
   const loadTable = useCallback((t: string) => {
     setLoadingTable(true)
@@ -401,7 +466,7 @@ export function DataTables() {
   useEffect(() => {
     if (!selected) return
     loadTable(selected)
-  }, [selected, loadTable])
+  }, [selected, loadTable, active])
 
   const handleSelect = (t: string) => {
     setSelected(t)
