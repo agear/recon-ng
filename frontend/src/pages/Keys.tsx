@@ -126,6 +126,7 @@ export function Keys() {
   const [inlineValues, setInlineValues] = useState<Record<string, string>>({})
   const [inlineSaving, setInlineSaving] = useState<Record<string, boolean>>({})
   const [inlineErrors, setInlineErrors] = useState<Record<string, string>>({})
+  const [rotating, setRotating] = useState<Set<string>>(new Set())
   const [requiredByInstalled, setRequiredByInstalled] = useState<Set<string>>(new Set())
   const [showAll, setShowAll] = useState(false)
 
@@ -148,13 +149,21 @@ export function Keys() {
   useEffect(load, [])
 
   const visibleKeys = useMemo(() => {
-    if (showAll) return keys
-    // Show stored keys + keys required by installed modules (as "not set" placeholder rows)
     const storedNames = new Set(keys.map(k => k.name))
-    const extraRows: KeyRecord[] = [...requiredByInstalled]
+    // Always include all KEY_INFO entries as placeholders so known keys are never lost from the page
+    const knownPlaceholders: KeyRecord[] = Object.keys(KEY_INFO)
       .filter(name => !storedNames.has(name))
       .map(name => ({ name, value: '' }))
-    const filtered = keys.filter(k => k.value || requiredByInstalled.has(k.name))
+    if (showAll) {
+      // Show all stored keys + all KEY_INFO placeholders
+      return [...keys, ...knownPlaceholders].sort((a, b) => a.name.localeCompare(b.name))
+    }
+    // Default: stored keys with values + keys required by installed modules (as placeholders)
+    const relevantNames = new Set([...requiredByInstalled])
+    const extraRows: KeyRecord[] = [...relevantNames]
+      .filter(name => !storedNames.has(name))
+      .map(name => ({ name, value: '' }))
+    const filtered = keys.filter(k => k.value || relevantNames.has(k.name))
     return [...filtered, ...extraRows].sort((a, b) => a.name.localeCompare(b.name))
   }, [keys, requiredByInstalled, showAll])
 
@@ -195,6 +204,7 @@ export function Keys() {
     try {
       await addKey(name, value)
       setInlineValues(prev => ({ ...prev, [name]: '' }))
+      setRotating(prev => { const s = new Set(prev); s.delete(name); return s })
       load()
     } catch (e) {
       setInlineErrors(prev => ({ ...prev, [name]: e instanceof Error ? e.message : 'Failed' }))
@@ -243,10 +253,10 @@ export function Keys() {
         <>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-zinc-600">
-              {showAll ? `Showing all ${keys.length} keys` : `Showing ${visibleKeys.length} keys required by installed modules`}
+              {showAll ? `Showing all keys` : `Showing ${visibleKeys.length} keys required by installed modules`}
             </p>
             <button className="text-xs text-brand hover:underline" onClick={() => setShowAll(v => !v)}>
-              {showAll ? 'Show relevant only' : `Show all (${keys.length})`}
+              {showAll ? 'Show relevant only' : 'Show all'}
             </button>
           </div>
         <div className="card overflow-hidden">
@@ -275,17 +285,18 @@ export function Keys() {
                     )}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                    {k.value
+                    {k.value && !rotating.has(k.name)
                       ? (revealed[k.name] ? k.value : mask(k.value))
                       : (
                         <div className="flex items-center gap-2">
                           <input
                             className="input text-xs py-0.5 w-48"
                             type="password"
-                            placeholder="Paste key value…"
+                            placeholder={rotating.has(k.name) ? 'New key value…' : 'Paste key value…'}
                             value={inlineValues[k.name] ?? ''}
                             onChange={e => setInlineValues(prev => ({ ...prev, [k.name]: e.target.value }))}
                             onKeyDown={e => e.key === 'Enter' && handleInlineSave(k.name)}
+                            autoFocus={rotating.has(k.name)}
                           />
                           <button
                             className="btn-primary py-0.5 px-2 text-xs"
@@ -301,20 +312,41 @@ export function Keys() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {k.value && (
+                      {k.value && !rotating.has(k.name) && (
+                        <>
+                          <button
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            onClick={() => setRevealed(r => ({ ...r, [k.name]: !r[k.name] }))}
+                          >
+                            {revealed[k.name] ? 'Hide' : 'Show'}
+                          </button>
+                          <button
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            onClick={() => setRotating(prev => new Set([...prev, k.name]))}
+                          >
+                            Rotate
+                          </button>
+                        </>
+                      )}
+                      {rotating.has(k.name) && (
                         <button
                           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                          onClick={() => setRevealed(r => ({ ...r, [k.name]: !r[k.name] }))}
+                          onClick={() => {
+                            setRotating(prev => { const s = new Set(prev); s.delete(k.name); return s })
+                            setInlineValues(prev => ({ ...prev, [k.name]: '' }))
+                          }}
                         >
-                          {revealed[k.name] ? 'Hide' : 'Show'}
+                          Cancel
                         </button>
                       )}
-                      <button
-                        className="btn-danger py-0.5 px-2 text-xs"
-                        onClick={() => setToDelete(k.name)}
-                      >
-                        Remove
-                      </button>
+                      {k.value && (
+                        <button
+                          className="btn-danger py-0.5 px-2 text-xs"
+                          onClick={() => setToDelete(k.name)}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
