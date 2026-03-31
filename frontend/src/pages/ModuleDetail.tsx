@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getModule, patchModule, runModule, ModuleMeta, ModuleOption } from '../api/client'
+import { getModule, patchModule, runModule, getKeys, addKey, deleteKey, checkDeps, installDeps, installModule, ModuleMeta, ModuleOption } from '../api/client'
 import { useTaskPoller } from '../hooks/useTaskPoller'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
@@ -201,16 +201,49 @@ export function ModuleDetail() {
   const [running, setRunning] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [runError, setRunError] = useState('')
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState('')
+
+  // Keys
+  const [storedKeys, setStoredKeys] = useState<Set<string>>(new Set())
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({})
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [rotatingKeys, setRotatingKeys] = useState<Set<string>>(new Set())
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({})
+  const [keyAdding, setKeyAdding] = useState<Record<string, boolean>>({})
+  const [keyErrors, setKeyErrors] = useState<Record<string, string>>({})
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({})
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+
+
+  // Deps
+  const [depsSatisfied, setDepsSatisfied] = useState<Record<string, boolean> | null>(null)
+  const [installingDeps, setInstallingDeps] = useState(false)
+  const [depsResult, setDepsResult] = useState<{ success: boolean; output: string; error: string } | null>(null)
 
   useEffect(() => {
     setLoading(true)
     setError('')
     setNotFound(false)
     setTaskId(null)
+    setDepsSatisfied(null)
+    setDepsResult(null)
     getModule(modulePath)
-      .then(data => {
+      .then(async data => {
         setMeta(data)
         setValues(Object.fromEntries((data.options ?? []).map(o => [o.name, o.value ?? ''])))
+        await Promise.all([
+          getKeys()
+            .then(r => {
+              const setKeys = r.keys.filter(k => k.value)
+              setStoredKeys(new Set(setKeys.map(k => k.name)))
+              setKeyValues(Object.fromEntries(setKeys.map(k => [k.name, k.value])))
+            })
+            .catch(() => {}),
+          data.dependencies?.length
+            ? checkDeps(data.dependencies).then(setDepsSatisfied).catch(() => {})
+            : Promise.resolve(),
+        ])
       })
       .catch(e => {
         if (e.message.startsWith('404')) setNotFound(true)
@@ -252,13 +285,51 @@ export function ModuleDetail() {
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>
   if (notFound) return (
     <div className="p-8 max-w-lg">
-      <div className="card p-6 flex flex-col gap-3">
-        <p className="text-sm font-semibold text-zinc-300">Module not installed</p>
-        <p className="text-xs text-zinc-500 font-mono">{modulePath}</p>
-        <p className="text-sm text-zinc-400">This module is not currently installed. Install it from the Marketplace to configure and run it.</p>
-        <button onClick={() => navigate(`/marketplace`)} className="text-sm text-brand hover:underline text-left">
-          Go to Marketplace →
-        </button>
+      <div className="card p-6 flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-semibold text-zinc-300">Module not installed</p>
+          <p className="text-xs text-zinc-500 font-mono mt-1">{modulePath}</p>
+        </div>
+        <p className="text-sm text-zinc-400">This module is not currently installed.</p>
+        <div className="flex items-center gap-3">
+          <button
+            className="btn-primary text-sm"
+            disabled={installing}
+            onClick={async () => {
+              setInstalling(true)
+              setInstallError('')
+              try {
+                await installModule(modulePath)
+                // Re-fetch the module — it should now be loaded
+                const data = await getModule(modulePath)
+                setMeta(data)
+                setValues(Object.fromEntries((data.options ?? []).map(o => [o.name, o.value ?? ''])))
+                setNotFound(false)
+                await Promise.all([
+                  getKeys().then(r => {
+                    const setKeys = r.keys.filter(k => k.value)
+                    setStoredKeys(new Set(setKeys.map(k => k.name)))
+                    setKeyValues(Object.fromEntries(setKeys.map(k => [k.name, k.value])))
+                  }).catch(() => {}),
+                  data.dependencies?.length ? checkDeps(data.dependencies).then(setDepsSatisfied).catch(() => {}) : Promise.resolve(),
+                ])
+              } catch (e) {
+                setInstallError(e instanceof Error ? e.message : 'Install failed')
+              } finally {
+                setInstalling(false)
+              }
+            }}
+          >
+            {installing ? <Spinner size="sm" /> : '⬇ Install Module'}
+          </button>
+          <button
+            onClick={() => navigate(`/marketplace?q=${encodeURIComponent(modulePath)}`)}
+            className="text-sm text-brand hover:underline"
+          >
+            Go to Marketplace →
+          </button>
+        </div>
+        {installError && <p className="text-xs text-red-400">{installError}</p>}
       </div>
     </div>
   )
@@ -293,26 +364,177 @@ export function ModuleDetail() {
       </div>
 
       {/* Metadata cards */}
-      {(meta.required_keys?.length || meta.dependencies?.length) ? (
-        <div className="flex gap-3 mb-6">
-          {meta.required_keys?.length ? (
-            <div className="card px-4 py-3 flex-1">
-              <p className="text-xs text-zinc-500 mb-1.5">Required Keys</p>
-              <div className="flex flex-wrap gap-1.5">
-                {meta.required_keys.map(k => <span key={k} className="badge-amber">{k}</span>)}
+      {(meta.required_keys?.length || meta.dependencies?.length) ? (() => {
+        const allKeysSatisfied = !!(meta.required_keys?.length && meta.required_keys.every(k => storedKeys.has(k) || savedKeys.has(k)))
+        const allDepsSatisfied = !!(meta.dependencies?.length && depsSatisfied != null && meta.dependencies.every(d => depsSatisfied[d]))
+        return (
+          <div className="flex gap-3 mb-6 flex-wrap">
+            {meta.required_keys?.length ? (
+              <div className="card px-4 py-4 flex-1 min-w-[220px]">
+                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${allKeysSatisfied ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  Required Keys
+                </p>
+                <div className="flex flex-col gap-2">
+                  {meta.required_keys.map(key => {
+                    const isStored = (storedKeys.has(key) || savedKeys.has(key)) && !rotatingKeys.has(key)
+                    const saveKey = async () => {
+                      if (!keyInputs[key]?.trim()) return
+                      setKeyAdding(prev => ({ ...prev, [key]: true }))
+                      setKeyErrors(prev => ({ ...prev, [key]: '' }))
+                      try {
+                        await addKey(key, keyInputs[key].trim())
+                        setSavedKeys(prev => new Set([...prev, key]))
+                        setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                        setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                      } catch (err) {
+                        setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
+                      } finally {
+                        setKeyAdding(prev => ({ ...prev, [key]: false }))
+                      }
+                    }
+                    return (
+                      <div key={key} className="flex flex-col gap-1.5 bg-zinc-950 rounded px-3 py-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs text-brand flex-1">{key}</span>
+                          {isStored && <span className="badge-green">stored</span>}
+                          {isStored && revealed[key] && (
+                            <span className="text-xs font-mono text-zinc-400 break-all">{keyValues[key]}</span>
+                          )}
+                          {confirmRemove === key ? (
+                            <>
+                              <span className="text-xs text-zinc-500">Remove?</span>
+                              <button
+                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                                onClick={async () => {
+                                  try {
+                                    await deleteKey(key)
+                                    setStoredKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                                    setSavedKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                                    setKeyValues(prev => { const v = { ...prev }; delete v[key]; return v })
+                                  } catch {}
+                                  setConfirmRemove(null)
+                                }}
+                              >Yes</button>
+                              <button
+                                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                onClick={() => setConfirmRemove(null)}
+                              >Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              {isStored && (
+                                <>
+                                  <button
+                                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    onClick={() => setRevealed(r => ({ ...r, [key]: !r[key] }))}
+                                  >
+                                    {revealed[key] ? 'Hide' : 'Show'}
+                                  </button>
+                                  <button
+                                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    onClick={() => setRotatingKeys(prev => new Set([...prev, key]))}
+                                  >
+                                    Rotate
+                                  </button>
+                                  <button
+                                    className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                                    onClick={() => setConfirmRemove(key)}
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              )}
+                              {rotatingKeys.has(key) && (
+                                <button
+                                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                  onClick={() => {
+                                    setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                                    setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        {!isStored && (
+                          <div className="flex gap-2">
+                            <input
+                              className="input text-xs py-1 flex-1"
+                              type="password"
+                              placeholder={rotatingKeys.has(key) ? 'New key value…' : 'Paste key value…'}
+                              value={keyInputs[key] ?? ''}
+                              onChange={e => setKeyInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') saveKey() }}
+                              autoFocus={rotatingKeys.has(key)}
+                            />
+                            <button
+                              className="btn-primary text-xs py-1 px-3"
+                              disabled={!keyInputs[key]?.trim() || keyAdding[key]}
+                              onClick={saveKey}
+                            >
+                              {keyAdding[key] ? <Spinner size="sm" /> : 'Save'}
+                            </button>
+                          </div>
+                        )}
+                        {keyErrors[key] && <p className="text-xs text-red-400">{keyErrors[key]}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
-          {meta.dependencies?.length ? (
-            <div className="card px-4 py-3 flex-1">
-              <p className="text-xs text-zinc-500 mb-1.5">Dependencies</p>
-              <div className="flex flex-wrap gap-1.5">
-                {meta.dependencies.map(d => <span key={d} className="badge-zinc">{d}</span>)}
+            ) : null}
+            {meta.dependencies?.length ? (
+              <div className="card px-4 py-4 flex-1 min-w-[220px]">
+                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${allDepsSatisfied ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  Dependencies
+                </p>
+                <div className="flex flex-col gap-1 mb-3">
+                  {meta.dependencies.map(dep => {
+                    const satisfied = depsSatisfied?.[dep]
+                    return (
+                      <div key={dep} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
+                        <span className="font-mono text-xs text-brand flex-1">{dep}</span>
+                        {satisfied != null && (
+                          <span className={satisfied ? 'badge-green' : 'badge-amber'}>{satisfied ? 'satisfied' : 'missing'}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {allDepsSatisfied && !depsResult && (
+                  <p className="text-xs text-emerald-400 mb-3">All dependencies are satisfied.</p>
+                )}
+                {depsResult && (
+                  <div className={`rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-48 overflow-y-auto mb-3 ${depsResult.success ? 'bg-emerald-950/30 border border-emerald-900/50 text-emerald-300' : 'bg-red-950/30 border border-red-900 text-red-300'}`}>
+                    {depsResult.success ? depsResult.output : depsResult.error || depsResult.output}
+                  </div>
+                )}
+                <button
+                  className="btn-primary text-xs"
+                  disabled={installingDeps || depsResult?.success === true || allDepsSatisfied}
+                  onClick={async () => {
+                    setInstallingDeps(true)
+                    setDepsResult(null)
+                    try {
+                      const r = await installDeps(meta.dependencies!)
+                      setDepsResult(r)
+                      if (r.success) checkDeps(meta.dependencies!).then(setDepsSatisfied).catch(() => {})
+                    } catch (e) {
+                      setDepsResult({ success: false, output: '', error: e instanceof Error ? e.message : 'Failed' })
+                    } finally {
+                      setInstallingDeps(false)
+                    }
+                  }}
+                >
+                  {installingDeps ? <Spinner size="sm" /> : '⬇ Install Packages'}
+                </button>
               </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+            ) : null}
+          </div>
+        )
+      })() : null}
 
       {/* Options */}
       {meta.options && meta.options.length > 0 && (
