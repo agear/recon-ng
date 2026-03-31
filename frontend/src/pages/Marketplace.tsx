@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getMarketplace, getKeys, checkDeps, installModule, removeModule, refreshMarketplace, installAllModules, removeAllModules, installDeps, addKey, MarketplaceModule } from '../api/client'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { getMarketplace, getKeys, checkDeps, installModule, removeModule, refreshMarketplace, installAllModules, removeAllModules, installDeps, addKey, deleteKey, MarketplaceModule } from '../api/client'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 import { HelpButton } from '../components/help/HelpButton'
@@ -14,7 +14,7 @@ const STATUS_BADGE: Record<Status, string> = {
   'not installed': 'badge-zinc',
 }
 
-function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void; storedKeys: Set<string>; depsSatisfied?: Record<string, boolean> }) {
+function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied, onDepsInstalled, onKeyChanged }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void; storedKeys: Set<string>; keyValues: Record<string, string>; depsSatisfied?: Record<string, boolean>; onDepsInstalled?: (deps: string[]) => void; onKeyChanged?: () => void }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -26,6 +26,10 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
   const [keyAdding, setKeyAdding] = useState<Record<string, boolean>>({})
   const [keyErrors, setKeyErrors] = useState<Record<string, string>>({})
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [rotatingKeys, setRotatingKeys] = useState<Set<string>>(new Set())
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({})
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+
   const isInstalled = module.status === 'installed' || module.status === 'outdated' || module.status === 'disabled'
   const hasDeps = module.dependencies?.length > 0
   const hasKeys = module.required_keys?.length > 0
@@ -76,7 +80,7 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
               {hasDeps && (
                 <button
                   onClick={() => setShowDeps(true)}
-                  className={`${allDepsSatisfied ? 'badge-green' : 'badge-zinc'} hover:opacity-80 transition-opacity cursor-pointer`}
+                  className={`${allDepsSatisfied ? 'badge-green' : 'badge-amber'} hover:opacity-80 transition-opacity cursor-pointer`}
                   title={allDepsSatisfied ? 'All dependencies satisfied' : 'Has dependencies — click for details'}
                 >
                   dependencies
@@ -127,13 +131,14 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
                 try {
                   const r = await installDeps(module.dependencies)
                   setDepsResult(r)
+                  if (r.success) onDepsInstalled?.(module.dependencies)
                 } catch (e) {
                   setDepsResult({ success: false, output: '', error: e instanceof Error ? e.message : 'Failed' })
                 } finally {
                   setInstallingDeps(false)
                 }
               }}
-              disabled={installingDeps}
+              disabled={installingDeps || depsResult?.success === true || allDepsSatisfied}
             >
               {installingDeps ? <Spinner size="sm" /> : '⬇ Install Packages'}
             </button>
@@ -142,12 +147,19 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
           <div className="flex flex-col gap-3 text-sm text-zinc-300">
             <p className="text-xs text-zinc-500">This module requires the following Python packages:</p>
             <div className="flex flex-col gap-1">
-              {module.dependencies.map(dep => (
-                <div key={dep} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
-                  <span className="font-mono text-xs text-brand">{dep}</span>
-                </div>
-              ))}
+              {module.dependencies.map(dep => {
+                const satisfied = depsSatisfied?.[dep]
+                return (
+                  <div key={dep} className="flex items-center gap-2 bg-zinc-950 rounded px-3 py-2">
+                    <span className="font-mono text-xs text-brand flex-1">{dep}</span>
+                    {satisfied && <span className="badge-green text-xs">satisfied</span>}
+                  </div>
+                )
+              })}
             </div>
+            {allDepsSatisfied && !depsResult && (
+              <p className="text-xs text-emerald-400">All dependencies are satisfied.</p>
+            )}
             {depsResult && (
               <div className={`rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-48 overflow-y-auto ${depsResult.success ? 'bg-emerald-950/30 border border-emerald-900/50 text-emerald-300' : 'bg-red-950/30 border border-red-900 text-red-300'}`}>
                 {depsResult.success ? depsResult.output : depsResult.error || depsResult.output}
@@ -163,53 +175,102 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
             <p className="text-xs text-zinc-500">This module will not run until the following keys are present in the keystore:</p>
             <div className="flex flex-col gap-2">
               {module.required_keys.map(key => {
-                const isStored = storedKeys.has(key) || savedKeys.has(key)
+                const isStored = (storedKeys.has(key) || savedKeys.has(key)) && !rotatingKeys.has(key)
+                const saveKey = async () => {
+                  if (!keyInputs[key]?.trim()) return
+                  setKeyAdding(prev => ({ ...prev, [key]: true }))
+                  setKeyErrors(prev => ({ ...prev, [key]: '' }))
+                  try {
+                    await addKey(key, keyInputs[key].trim())
+                    setSavedKeys(prev => new Set([...prev, key]))
+                    setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                    setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                  } catch (err) {
+                    setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
+                  } finally {
+                    setKeyAdding(prev => ({ ...prev, [key]: false }))
+                  }
+                }
                 return (
                   <div key={key} className="flex flex-col gap-1.5 bg-zinc-950 rounded px-3 py-2.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs text-brand flex-1">{key}</span>
                       {isStored && <span className="badge-green text-xs">stored</span>}
+                      {isStored && revealed[key] && (
+                        <span className="text-xs font-mono text-zinc-400 break-all">{keyValues[key]}</span>
+                      )}
+                      {confirmRemove === key ? (
+                        <>
+                          <span className="text-xs text-zinc-500">Remove?</span>
+                          <button
+                            className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                            onClick={async () => {
+                              try {
+                                await deleteKey(key)
+                                setSavedKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                                onKeyChanged?.()
+                              } catch {}
+                              setConfirmRemove(null)
+                            }}
+                          >Yes</button>
+                          <button
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            onClick={() => setConfirmRemove(null)}
+                          >Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          {isStored && (
+                            <>
+                              <button
+                                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                onClick={() => setRevealed(r => ({ ...r, [key]: !r[key] }))}
+                              >
+                                {revealed[key] ? 'Hide' : 'Show'}
+                              </button>
+                              <button
+                                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                onClick={() => setRotatingKeys(prev => new Set([...prev, key]))}
+                              >
+                                Rotate
+                              </button>
+                              <button
+                                className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                                onClick={() => setConfirmRemove(key)}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          )}
+                          {rotatingKeys.has(key) && (
+                            <button
+                              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                              onClick={() => {
+                                setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
+                                setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                     {!isStored && (
                       <div className="flex gap-2">
                         <input
                           className="input text-xs py-1 flex-1"
                           type="password"
-                          placeholder="Paste key value…"
+                          placeholder={rotatingKeys.has(key) ? 'New key value…' : 'Paste key value…'}
                           value={keyInputs[key] ?? ''}
                           onChange={e => setKeyInputs(prev => ({ ...prev, [key]: e.target.value }))}
-                          onKeyDown={async e => {
-                            if (e.key === 'Enter' && keyInputs[key]?.trim()) {
-                              setKeyAdding(prev => ({ ...prev, [key]: true }))
-                              setKeyErrors(prev => ({ ...prev, [key]: '' }))
-                              try {
-                                await addKey(key, keyInputs[key].trim())
-                                setSavedKeys(prev => new Set([...prev, key]))
-                                setKeyInputs(prev => ({ ...prev, [key]: '' }))
-                              } catch (err) {
-                                setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
-                              } finally {
-                                setKeyAdding(prev => ({ ...prev, [key]: false }))
-                              }
-                            }
-                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') saveKey() }}
+                          autoFocus={rotatingKeys.has(key)}
                         />
                         <button
                           className="btn-primary text-xs py-1 px-3"
                           disabled={!keyInputs[key]?.trim() || keyAdding[key]}
-                          onClick={async () => {
-                            setKeyAdding(prev => ({ ...prev, [key]: true }))
-                            setKeyErrors(prev => ({ ...prev, [key]: '' }))
-                            try {
-                              await addKey(key, keyInputs[key].trim())
-                              setSavedKeys(prev => new Set([...prev, key]))
-                              setKeyInputs(prev => ({ ...prev, [key]: '' }))
-                            } catch (err) {
-                              setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
-                            } finally {
-                              setKeyAdding(prev => ({ ...prev, [key]: false }))
-                            }
-                          }}
+                          onClick={saveKey}
                         >
                           {keyAdding[key] ? <Spinner size="sm" /> : 'Save'}
                         </button>
@@ -233,6 +294,7 @@ function MarketplaceRow({ module, onUpdate, storedKeys, depsSatisfied }: { modul
 export function Marketplace() {
   const [modules, setModules] = useState<MarketplaceModule[]>([])
   const [storedKeys, setStoredKeys] = useState<Set<string>>(new Set())
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({})
   const [depsSatisfied, setDepsSatisfied] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -243,7 +305,8 @@ export function Marketplace() {
   const [removingAll, setRemovingAll] = useState(false)
   const [removeAllResult, setRemoveAllResult] = useState<{ removed: number; errors: { path: string; error: string }[] } | null>(null)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
   const [category, setCategory] = useState('all')
 
@@ -252,7 +315,9 @@ export function Marketplace() {
     Promise.all([getMarketplace(q), getKeys()])
       .then(([mkt, keys]) => {
         setModules(mkt.modules)
-        setStoredKeys(new Set(keys.keys.filter(k => k.value).map(k => k.name)))
+        const setKeys = keys.keys.filter(k => k.value)
+        setStoredKeys(new Set(setKeys.map(k => k.name)))
+        setKeyValues(Object.fromEntries(setKeys.map(k => [k.name, k.value])))
         // Collect all unique dependencies across all marketplace modules
         const allDeps = [...new Set(mkt.modules.flatMap(m => m.dependencies ?? []))]
         if (allDeps.length > 0) {
@@ -308,6 +373,10 @@ export function Marketplace() {
   const handleUpdate = (updated: MarketplaceModule | null) => {
     if (!updated) return
     setModules(prev => prev.map(m => m.path === updated.path ? updated : m))
+  }
+
+  const handleDepsInstalled = (_deps: string[]) => {
+    load()
   }
 
   const categories = useMemo(() => {
@@ -402,7 +471,7 @@ export function Marketplace() {
       ) : (
         <div className="card overflow-hidden">
           {filtered.map(m => (
-            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} storedKeys={storedKeys} depsSatisfied={depsSatisfied} />
+            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} storedKeys={storedKeys} keyValues={keyValues} depsSatisfied={depsSatisfied} onDepsInstalled={handleDepsInstalled} onKeyChanged={load} />
           ))}
         </div>
       )}
