@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSnapshots, takeSnapshot, loadSnapshot, deleteSnapshot } from '../api/client'
+import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
 
@@ -19,6 +20,8 @@ export function Snapshots() {
   const [toDelete, setToDelete] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const { active } = useWorkspace()
+
   const refresh = () => {
     setLoading(true)
     getSnapshots()
@@ -27,7 +30,7 @@ export function Snapshots() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(refresh, [])
+  useEffect(refresh, [active])
 
   const handleTake = async () => {
     setTaking(true)
