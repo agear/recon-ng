@@ -806,6 +806,8 @@ class MarketplaceDepsInstall(Resource):
                 [_sys.executable, '-m', 'pip', 'install'] + packages,
                 capture_output=True, text=True, timeout=120,
             )
+            if result.returncode == 0:
+                recon._do_modules_reload('')
             return {
                 'success': result.returncode == 0,
                 'output': result.stdout,
@@ -838,13 +840,16 @@ class MarketplaceCheckDeps(Resource):
             200:
                 description: satisfaction status per package
         '''
-        import importlib.util
+        import importlib.util, re
         packages = (request.json or {}).get('packages', [])
         result = {}
         for pkg in packages:
-            # importlib uses underscores; pip names use hyphens
-            mod_name = pkg.replace('-', '_').split('[')[0]
-            result[pkg] = importlib.util.find_spec(mod_name) is not None
+            # Strip version specifiers (>=, ==, <, etc.) and extras ([...]) then normalize hyphens
+            mod_name = re.split(r'[><=!~\[;]', pkg)[0].strip().replace('-', '_')
+            try:
+                result[pkg] = importlib.util.find_spec(mod_name) is not None
+            except (ModuleNotFoundError, ValueError):
+                result[pkg] = False
         return result
 
 api.add_resource(MarketplaceCheckDeps, '/marketplace/check-deps')
