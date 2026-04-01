@@ -69,10 +69,13 @@ function InfoModal({ meta, onClose }: { meta: ModuleMeta; onClose: () => void })
   )
 }
 
-function OptionRow({ opt, value, onChange, meta }: { opt: ModuleOption; value: string; onChange: (v: string) => void; meta: ModuleMeta }) {
+function OptionRow({ opt, value, onChange, meta, id, highlighted }: { opt: ModuleOption; value: string; onChange: (v: string) => void; meta: ModuleMeta; id?: string; highlighted?: boolean }) {
   const [showInfo, setShowInfo] = useState(false)
   return (
-    <div className="grid grid-cols-3 gap-4 items-start py-3 border-b border-zinc-800/50 last:border-0">
+    <div
+      id={id}
+      className={`grid grid-cols-3 gap-4 items-start py-3 border-b border-zinc-800/50 last:border-0 rounded transition-colors duration-300 ${highlighted ? 'bg-amber-950/30' : ''}`}
+    >
       <div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-zinc-200 font-medium">{opt.name}</span>
@@ -81,7 +84,7 @@ function OptionRow({ opt, value, onChange, meta }: { opt: ModuleOption; value: s
         <OptionDescription description={opt.description} onInfoClick={() => setShowInfo(true)} />
       </div>
       <input
-        className="input col-span-2"
+        className={`input col-span-2 ${highlighted ? 'ring-2 ring-amber-500' : ''}`}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder="Not set"
@@ -216,6 +219,9 @@ export function ModuleDetail() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
 
 
+  // Highlight state for missing fields
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set())
+
   // Deps
   const [depsSatisfied, setDepsSatisfied] = useState<Record<string, boolean> | null>(null)
   const [installingDeps, setInstallingDeps] = useState(false)
@@ -280,6 +286,27 @@ export function ModuleDetail() {
     } finally {
       setRunning(false)
     }
+  }
+
+  const handleRunOrHighlight = () => {
+    if (!meta) return
+    const missingIds: string[] = []
+    for (const opt of (meta.options ?? [])) {
+      if (opt.required && !String(values[opt.name] ?? '').trim()) missingIds.push(`option-${opt.name}`)
+    }
+    for (const key of (meta.required_keys ?? [])) {
+      if (!storedKeys.has(key) && !savedKeys.has(key)) missingIds.push(`key-${key}`)
+    }
+    if ((meta.dependencies ?? []).some(d => depsSatisfied != null && depsSatisfied[d] === false)) {
+      missingIds.push('deps-card')
+    }
+    if (missingIds.length > 0) {
+      document.getElementById(missingIds[0])?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlighted(new Set(missingIds))
+      setTimeout(() => setHighlighted(new Set()), 2000)
+      return
+    }
+    handleRun()
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>
@@ -372,9 +399,33 @@ export function ModuleDetail() {
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <button className="btn-primary" onClick={handleRun} disabled={running}>
-            {running ? <Spinner size="sm" /> : '▶ Run Module'}
-          </button>
+          {(() => {
+            const missingOpts = (meta.options ?? []).filter(o => o.required && !String(values[o.name] ?? '').trim())
+            const missingKeys = (meta.required_keys ?? []).filter(k => !storedKeys.has(k) && !savedKeys.has(k))
+            const missingDeps = (meta.dependencies ?? []).filter(d => depsSatisfied != null && depsSatisfied[d] === false)
+            const blocked = missingOpts.length > 0 || missingKeys.length > 0 || missingDeps.length > 0
+            return (
+              <>
+                <button
+                  className={blocked ? 'btn-primary opacity-50' : 'btn-primary'}
+                  onClick={handleRunOrHighlight}
+                  disabled={running}
+                  title={blocked ? 'Required fields are missing — click to see what needs to be filled in' : undefined}
+                >
+                  {running ? <Spinner size="sm" /> : '▶ Run Module'}
+                </button>
+                {blocked && !running && (
+                  <p className="text-xs text-amber-500 text-right max-w-[180px]">
+                    {[
+                      missingOpts.length > 0 && `${missingOpts.length} required option${missingOpts.length > 1 ? 's' : ''}`,
+                      missingKeys.length > 0 && `${missingKeys.length} missing key${missingKeys.length > 1 ? 's' : ''}`,
+                      missingDeps.length > 0 && `${missingDeps.length} unmet dep${missingDeps.length > 1 ? 's' : ''}`,
+                    ].filter(Boolean).join(', ')}
+                  </p>
+                )}
+              </>
+            )
+          })()}
           {runError && <p className="text-xs text-red-400">{runError}</p>}
         </div>
       </div>
@@ -409,7 +460,7 @@ export function ModuleDetail() {
                       }
                     }
                     return (
-                      <div key={key} className="flex flex-col gap-1.5 bg-zinc-950 rounded px-3 py-2.5">
+                      <div key={key} id={`key-${key}`} className={`flex flex-col gap-1.5 bg-zinc-950 rounded px-3 py-2.5 transition-colors duration-300 ${highlighted.has(`key-${key}`) ? 'ring-2 ring-amber-500' : ''}`}>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs text-brand flex-1">{key}</span>
                           {isStored && <span className="badge-green">stored</span>}
@@ -502,7 +553,7 @@ export function ModuleDetail() {
               </div>
             ) : null}
             {meta.dependencies?.length ? (
-              <div className="card px-4 py-4 flex-1 min-w-[220px]">
+              <div id="deps-card" className={`card px-4 py-4 flex-1 min-w-[220px] transition-colors duration-300 ${highlighted.has('deps-card') ? 'ring-2 ring-amber-500' : ''}`}>
                 <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${allDepsSatisfied ? 'text-emerald-400' : 'text-amber-400'}`}>
                   Dependencies
                 </p>
@@ -570,6 +621,8 @@ export function ModuleDetail() {
             {meta.options.map(opt => (
               <OptionRow
                 key={opt.name}
+                id={`option-${opt.name}`}
+                highlighted={highlighted.has(`option-${opt.name}`)}
                 opt={opt}
                 value={values[opt.name] ?? ''}
                 onChange={v => setValues(prev => ({ ...prev, [opt.name]: v }))}
