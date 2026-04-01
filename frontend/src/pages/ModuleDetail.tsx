@@ -291,6 +291,14 @@ export function ModuleDetail() {
           <p className="text-xs text-zinc-500 font-mono mt-1">{modulePath}</p>
         </div>
         <p className="text-sm text-zinc-400">This module is not currently installed.</p>
+        <a
+          href={`https://github.com/lanmaster53/recon-ng-modules/blob/master/modules/${modulePath}.py`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-zinc-500 hover:text-brand transition-colors"
+        >
+          View source on GitHub ↗
+        </a>
         <div className="flex items-center gap-3">
           <button
             className="btn-primary text-sm"
@@ -353,6 +361,14 @@ export function ModuleDetail() {
           <div className="flex items-center gap-3 mt-2">
             <span className="text-xs text-zinc-600">by {meta.author}</span>
             {meta.version && <span className="badge-zinc">v{meta.version}</span>}
+            <a
+              href={`https://github.com/lanmaster53/recon-ng-modules/blob/master/modules/${modulePath}.py`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-zinc-500 hover:text-brand transition-colors"
+            >
+              View source ↗
+            </a>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
