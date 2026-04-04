@@ -1,4 +1,67 @@
-# The Recon-ng Framework
+# The Recon-ng Framework (Web UI Fork)
+
+> **This is a fork of [lanmaster53/recon-ng](https://github.com/lanmaster53/recon-ng)** that adds a modern React-based web UI for managing workspaces, modules, keys, and reconnaissance jobs through a browser — on top of the existing Flask REST API and RQ worker backend.
+
+## Building and Running This Fork
+
+### Prerequisites
+
+- Python 3
+- Node.js 18+ and npm
+- Redis (for background job execution)
+
+### Quick Start
+
+**1. Create and activate a virtual environment:**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**2. Install Python dependencies:**
+
+```bash
+pip install -r REQUIREMENTS
+```
+
+**3. Build the frontend** (React/TypeScript → compiled into `recon/core/web/static/dist/`):
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+**4. Start everything with `start.sh`:**
+
+```bash
+./start.sh
+```
+
+This activates the venv, starts Redis, starts an RQ worker, and launches the Flask web server. Press `Ctrl+C` to shut everything down cleanly.
+
+Then open `http://localhost:5000` in your browser.
+
+### Frontend Development
+
+To run the Vite dev server with hot module reloading (proxies API calls to `localhost:5000`):
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Docker (all-in-one)
+
+```bash
+docker-compose up
+```
+
+This starts the Flask web server, RQ worker, and Redis together. The UI is served at `http://localhost:5000`.
+
+---
 
 [Recon-ng content now available on Pluralsight!](https://app.pluralsight.com/library/courses/technical-information-gathering-recon-ng)
 
