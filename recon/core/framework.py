@@ -324,7 +324,7 @@ class Framework(cmd.Cmd):
         tdata_len = sum(lens) + (3*(cols-1))
         diff = title_len - tdata_len
         if diff > 0:
-            diff_per = diff / cols
+            diff_per = diff // cols
             lens = [x+diff_per for x in lens]
             diff_mod = diff % cols
             for x in range(0, diff_mod):

@@ -49,7 +49,7 @@ class UrlValidator(BaseValidator):
             # Path
             r"(?:/?|[/?]\S+)$"
         )
-        super(UrlValidator, self).__init__(regex, 'url')
+        super(UrlValidator, self).__init__(regex, 'url', flags=re.IGNORECASE)
 
 
 class EmailValidator(BaseValidator):

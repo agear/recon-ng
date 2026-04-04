@@ -88,7 +88,7 @@ class BaseModule(framework.Framework):
                 self.error(f"Corrupt key file. Manual migration of '{key}' required.")
 
     def ascii_sanitize(self, s):
-        return ''.join([char for char in s if ord(char) in [10,13] + range(32, 126)])
+        return ''.join([char for char in s if ord(char) in [10,13] + list(range(32, 126))])
 
     def html_unescape(self, s):
         '''Unescapes HTML markup and returns an unescaped string.'''
