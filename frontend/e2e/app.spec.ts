@@ -20,6 +20,22 @@ test('page loads and React mounts', async ({ page }) => {
   expect(rootEmpty).toBe(false)
 })
 
+test('debug: dump page state', async ({ page }) => {
+  await page.goto('/dashboard')
+  await page.waitForLoadState('networkidle')
+  const info = await page.evaluate(() => ({
+    title: document.title,
+    rootHTML: document.getElementById('root')?.innerHTML.slice(0, 2000),
+    bodyClass: document.body.className,
+    htmlClass: document.documentElement.className,
+    styleSheets: Array.from(document.styleSheets).map(s => ({ href: s.href, rules: s.cssRules?.length ?? 'blocked' })),
+  }))
+  const fs = await import('fs')
+  fs.writeFileSync('test-results/page-debug.json', JSON.stringify(info, null, 2))
+  // Always pass — this test just collects info
+  expect(true).toBe(true)
+})
+
 test.describe('Navigation', () => {
   test('dashboard loads and shows harvested data', async ({ page }) => {
     await page.goto('/dashboard')
