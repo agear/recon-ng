@@ -121,13 +121,24 @@ export function Shell({ children }: { children: ReactNode }) {
           {/* Footer */}
           <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
             <p className="text-xs text-zinc-600">v5.1.2</p>
-            <button
-              onClick={() => setShowQuickstart(true)}
-              className="text-xs text-zinc-600 hover:text-brand transition-colors"
-              title="Open quick start guide"
-            >
-              Quick Start
-            </button>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://github.com/lanmaster53/recon-ng/wiki"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-zinc-600 hover:text-brand transition-colors"
+                title="Open wiki"
+              >
+                Wiki
+              </a>
+              <button
+                onClick={() => setShowQuickstart(true)}
+                className="text-xs text-zinc-600 hover:text-brand transition-colors"
+                title="Open quick start guide"
+              >
+                Quick Start
+              </button>
+            </div>
           </div>
         </aside>
 
