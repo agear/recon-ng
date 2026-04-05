@@ -101,7 +101,7 @@ function OptionRow({ opt, value, onChange, meta, id, highlighted }: { opt: Modul
     >
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-zinc-200 font-medium">{opt.name}</span>
+          <span className="text-sm text-zinc-200 font-medium break-all">{opt.name}</span>
           {opt.required && <span className="badge-red">required</span>}
         </div>
         <OptionDescription description={opt.description} onInfoClick={() => setShowInfo(true)} />
