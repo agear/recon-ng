@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { getModule, patchModule, runModule, getKeys, addKey, deleteKey, checkDeps, installDeps, installModule, ModuleMeta, ModuleOption } from '../api/client'
 import { useTaskPoller } from '../hooks/useTaskPoller'
 import { Spinner } from '../components/ui/Spinner'
@@ -31,6 +31,29 @@ function OptionDescription({ description, onInfoClick }: { description: string; 
   )
 }
 
+const DB_TABLES = ['domains', 'hosts', 'contacts', 'credentials', 'leaks', 'ports',
+  'vulnerabilities', 'companies', 'netblocks', 'locations', 'pushpins', 'profiles', 'repositories']
+const TABLE_RE = new RegExp(`\\b(${DB_TABLES.join('|')})\\b`, 'gi')
+
+function DescriptionWithTableLinks({ text, className }: { text: string; className?: string }) {
+  const parts: (string | JSX.Element)[] = []
+  let last = 0
+  let match: RegExpExecArray | null
+  TABLE_RE.lastIndex = 0
+  while ((match = TABLE_RE.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index))
+    const name = match[1].toLowerCase()
+    parts.push(
+      <Link key={match.index} to={`/data/${name}`} className="text-brand hover:underline">
+        {match[1]}
+      </Link>
+    )
+    last = match.index + match[1].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return <p className={className}>{parts}</p>
+}
+
 function InfoModal({ meta, onClose }: { meta: ModuleMeta; onClose: () => void }) {
   return (
     <Modal title="Module Info" onClose={onClose}>
@@ -45,7 +68,7 @@ function InfoModal({ meta, onClose }: { meta: ModuleMeta; onClose: () => void })
         {meta.description && (
           <div>
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Description</p>
-            <p className="text-xs text-zinc-300">{meta.description}</p>
+            <DescriptionWithTableLinks text={meta.description} className="text-xs text-zinc-300" />
           </div>
         )}
         {meta.required_keys && meta.required_keys.length > 0 && (
@@ -384,7 +407,7 @@ export function ModuleDetail() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100">{meta.name}</h1>
-          <p className="text-sm text-zinc-500 mt-1">{meta.description}</p>
+          <DescriptionWithTableLinks text={meta.description ?? ''} className="text-sm text-zinc-500 mt-1" />
           <div className="flex items-center gap-3 mt-2">
             <span className="text-xs text-zinc-600">by {meta.author}</span>
             {meta.version && <span className="badge-zinc">v{meta.version}</span>}
