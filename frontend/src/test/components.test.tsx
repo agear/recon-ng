@@ -12,8 +12,8 @@ describe('Spinner', () => {
   it('applies size classes', () => {
     const { container: sm } = render(<Spinner size="sm" />)
     const { container: lg } = render(<Spinner size="lg" />)
-    expect(sm.querySelector('svg')?.className).toContain('h-4')
-    expect(lg.querySelector('svg')?.className).toContain('h-8')
+    expect(sm.querySelector('svg')?.getAttribute('class')).toContain('h-4')
+    expect(lg.querySelector('svg')?.getAttribute('class')).toContain('h-8')
   })
 })
 
