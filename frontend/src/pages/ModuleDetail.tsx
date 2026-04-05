@@ -449,8 +449,11 @@ export function ModuleDetail() {
                       setKeyAdding(prev => ({ ...prev, [key]: true }))
                       setKeyErrors(prev => ({ ...prev, [key]: '' }))
                       try {
-                        await addKey(key, keyInputs[key].trim())
+                        const newVal = keyInputs[key].trim()
+                        await addKey(key, newVal)
                         setSavedKeys(prev => new Set([...prev, key]))
+                        setStoredKeys(prev => new Set([...prev, key]))
+                        setKeyValues(prev => ({ ...prev, [key]: newVal }))
                         setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
                         setKeyInputs(prev => ({ ...prev, [key]: '' }))
                       } catch (err) {
