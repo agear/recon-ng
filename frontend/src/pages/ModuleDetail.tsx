@@ -94,7 +94,7 @@ function InfoModal({ meta, onClose }: { meta: ModuleMeta; onClose: () => void })
 
 const FILE_PATH_RE = /\b(path|file)\b/i
 
-function isFilePathOption(opt: ModuleOption): boolean {
+export function isFilePathOption(opt: ModuleOption): boolean {
   return FILE_PATH_RE.test(opt.description) || /file|wordlist/i.test(opt.name)
 }
 
