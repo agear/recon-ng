@@ -11,7 +11,7 @@ test.beforeAll(async ({ request }) => {
   } catch { /* server not reachable */ }
   if (!ok) {
     throw new Error(
-      'recon-ng server is not running at http://localhost:5000. ' +
+      'recon-ng server is not running at http://127.0.0.1:5000. ' +
       'Start it with ./start.sh before running E2E tests.'
     )
   }
