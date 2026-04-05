@@ -53,6 +53,46 @@ cd frontend
 npm run dev
 ```
 
+### Testing
+
+#### Python (pytest)
+
+Covers the Flask REST API, framework utilities, module helpers, and database layer.
+
+```bash
+# Run the full suite
+venv/bin/python -m pytest tests/ -q
+
+# With coverage report
+venv/bin/python -m pytest tests/ --cov=recon --cov-report=term -q
+```
+
+#### Frontend unit tests (Vitest + React Testing Library)
+
+Covers API client functions, the file path option heuristic, and UI component behaviour. No server required.
+
+```bash
+cd frontend
+npm test                # run once
+npm run test:watch      # watch mode
+npm run test:coverage   # with coverage report
+```
+
+#### Frontend E2E tests (Playwright)
+
+Full browser tests against a running instance. Start the server first (`./start.sh`), then:
+
+```bash
+cd frontend
+
+# First run only — install the browser
+npx playwright install chromium
+
+npm run test:e2e
+```
+
+---
+
 ### Docker (all-in-one)
 
 ```bash
