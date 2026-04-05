@@ -1,11 +1,23 @@
 import { test, expect } from '@playwright/test'
 
-// Suppress the QuickStart modal that opens automatically on a fresh browser
-// context, and which blocks click/fill actions on covered elements.
+// Suppress the QuickStart modal and capture console errors for debugging.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('recon_ng_quickstart_v1', 'seen')
   })
+  page.on('pageerror', err => console.error('[page error]', err.message))
+  page.on('console', msg => { if (msg.type() === 'error') console.error('[console]', msg.text()) })
+})
+
+test('page loads and React mounts', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  // The root div must have children — if React failed to mount it stays empty
+  const rootEmpty = await page.evaluate(() => document.getElementById('root')?.children.length === 0)
+  if (rootEmpty) {
+    await page.screenshot({ path: 'test-results/react-mount-failure.png', fullPage: true })
+  }
+  expect(rootEmpty).toBe(false)
 })
 
 test.describe('Navigation', () => {
