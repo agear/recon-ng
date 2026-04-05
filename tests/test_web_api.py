@@ -316,3 +316,51 @@ class TestCheckDeps:
         resp = json_post(client, '/api/marketplace/check-deps', {'packages': []})
         assert resp.status_code == 200
         assert json.loads(resp.data) == {}
+
+
+# ---------------------------------------------------------------------------
+# /api/files/upload
+# ---------------------------------------------------------------------------
+
+class TestFileUpload:
+    def test_upload_returns_200(self, web_client):
+        from io import BytesIO
+        client, recon, tasks = web_client
+        resp = client.post(
+            '/api/files/upload',
+            data={'file': (BytesIO(b'alpha\nbeta\ngamma\n'), 'wordlist.txt')},
+            content_type='multipart/form-data',
+        )
+        assert resp.status_code == 200
+
+    def test_upload_returns_path(self, web_client):
+        from io import BytesIO
+        client, recon, tasks = web_client
+        resp = client.post(
+            '/api/files/upload',
+            data={'file': (BytesIO(b'test'), 'test.txt')},
+            content_type='multipart/form-data',
+        )
+        data = json.loads(resp.data)
+        assert 'path' in data
+        assert data['path'].endswith('test.txt')
+
+    def test_upload_saves_file_to_disk(self, web_client):
+        import os
+        from io import BytesIO
+        client, recon, tasks = web_client
+        content = b'hello world'
+        resp = client.post(
+            '/api/files/upload',
+            data={'file': (BytesIO(content), 'check_save.txt')},
+            content_type='multipart/form-data',
+        )
+        path = json.loads(resp.data)['path']
+        assert os.path.isfile(path)
+        with open(path, 'rb') as f:
+            assert f.read() == content
+
+    def test_upload_no_file_returns_400(self, web_client):
+        client, recon, tasks = web_client
+        resp = client.post('/api/files/upload', data={}, content_type='multipart/form-data')
+        assert resp.status_code == 400

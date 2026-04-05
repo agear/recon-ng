@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { getModule, patchModule, runModule, getKeys, addKey, deleteKey, checkDeps, installDeps, installModule, ModuleMeta, ModuleOption } from '../api/client'
+import { getModule, patchModule, runModule, getKeys, addKey, deleteKey, checkDeps, installDeps, installModule, uploadFile, ModuleMeta, ModuleOption } from '../api/client'
 import { useTaskPoller } from '../hooks/useTaskPoller'
 import { Spinner } from '../components/ui/Spinner'
 import { Modal } from '../components/ui/Modal'
@@ -92,6 +92,61 @@ function InfoModal({ meta, onClose }: { meta: ModuleMeta; onClose: () => void })
   )
 }
 
+const FILE_PATH_RE = /\b(path|file)\b/i
+
+function isFilePathOption(opt: ModuleOption): boolean {
+  return FILE_PATH_RE.test(opt.description) || /file|wordlist/i.test(opt.name)
+}
+
+function FilePathInput({ value, onChange, highlighted }: { value: string; onChange: (v: string) => void; highlighted?: boolean }) {
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = useCallback(async (file: File) => {
+    setUploading(true)
+    setUploadError('')
+    try {
+      const path = await uploadFile(file)
+      onChange(path)
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }, [onChange])
+
+  return (
+    <div className="col-span-2 flex flex-col gap-1.5">
+      <input
+        className={`input ${highlighted ? 'ring-2 ring-amber-500' : ''}`}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Path or drop a file below"
+      />
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => {
+          e.preventDefault()
+          setDragging(false)
+          const file = e.dataTransfer.files[0]
+          if (file) handleFile(file)
+        }}
+        className={`flex items-center justify-center gap-2 border border-dashed rounded px-3 py-2 text-xs cursor-pointer transition-colors select-none
+          ${dragging ? 'border-brand bg-brand/10 text-brand' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-400'}
+          ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+      >
+        {uploading ? <><span className="animate-spin">⟳</span> Uploading…</> : <>↑ Drop file or click to browse</>}
+      </div>
+      {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
+      <input ref={fileRef} type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+    </div>
+  )
+}
+
 function OptionRow({ opt, value, onChange, meta, id, highlighted }: { opt: ModuleOption; value: string; onChange: (v: string) => void; meta: ModuleMeta; id?: string; highlighted?: boolean }) {
   const [showInfo, setShowInfo] = useState(false)
   return (
@@ -106,12 +161,16 @@ function OptionRow({ opt, value, onChange, meta, id, highlighted }: { opt: Modul
         </div>
         <OptionDescription description={opt.description} onInfoClick={() => setShowInfo(true)} />
       </div>
-      <input
-        className={`input col-span-2 ${highlighted ? 'ring-2 ring-amber-500' : ''}`}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder="Not set"
-      />
+      {isFilePathOption(opt) ? (
+        <FilePathInput value={value} onChange={onChange} highlighted={highlighted} />
+      ) : (
+        <input
+          className={`input col-span-2 ${highlighted ? 'ring-2 ring-amber-500' : ''}`}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Not set"
+        />
+      )}
       {showInfo && <InfoModal meta={meta} onClose={() => setShowInfo(false)} />}
     </div>
   )

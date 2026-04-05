@@ -279,3 +279,14 @@ export const addKey = (name: string, value: string) =>
 
 export const deleteKey = (name: string) =>
   apiFetch<void>(`/keys/${name}`, { method: 'DELETE' })
+
+// Files
+
+export const uploadFile = async (file: File): Promise<string> => {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/files/upload', { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`)
+  const data = await res.json()
+  return data.path as string
+}

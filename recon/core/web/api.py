@@ -1062,3 +1062,23 @@ class SnapshotInst(Resource):
         return '', 204
 
 api.add_resource(SnapshotInst, '/snapshots/<string:name>')
+
+
+class FileUpload(Resource):
+
+    def post(self):
+        '''Saves an uploaded file to the recon-ng data directory and returns its path'''
+        if 'file' not in request.files:
+            abort(400)
+        f = request.files['file']
+        if not f.filename:
+            abort(400)
+        upload_dir = os.path.join(os.path.expanduser('~'), '.recon-ng', 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        # Use the original filename; strip any directory components for safety
+        safe_name = os.path.basename(f.filename)
+        dest = os.path.join(upload_dir, safe_name)
+        f.save(dest)
+        return {'path': dest}
+
+api.add_resource(FileUpload, '/files/upload')
