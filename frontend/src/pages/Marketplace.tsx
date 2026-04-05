@@ -14,7 +14,7 @@ const STATUS_BADGE: Record<Status, string> = {
   'not installed': 'badge-zinc',
 }
 
-function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied, onDepsInstalled, onKeyChanged }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void; storedKeys: Set<string>; keyValues: Record<string, string>; depsSatisfied?: Record<string, boolean>; onDepsInstalled?: (deps: string[]) => void; onKeyChanged?: () => void }) {
+function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied, onDepsInstalled, onKeyChanged, onKeyUpdated }: { module: MarketplaceModule; onUpdate: (m: MarketplaceModule | null) => void; storedKeys: Set<string>; keyValues: Record<string, string>; depsSatisfied?: Record<string, boolean>; onDepsInstalled?: (deps: string[]) => void; onKeyChanged?: () => void; onKeyUpdated?: (key: string, value: string) => void }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -181,10 +181,12 @@ function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied
                   setKeyAdding(prev => ({ ...prev, [key]: true }))
                   setKeyErrors(prev => ({ ...prev, [key]: '' }))
                   try {
-                    await addKey(key, keyInputs[key].trim())
+                    const newVal = keyInputs[key].trim()
+                    await addKey(key, newVal)
                     setSavedKeys(prev => new Set([...prev, key]))
                     setRotatingKeys(prev => { const s = new Set(prev); s.delete(key); return s })
                     setKeyInputs(prev => ({ ...prev, [key]: '' }))
+                    onKeyUpdated?.(key, newVal)
                   } catch (err) {
                     setKeyErrors(prev => ({ ...prev, [key]: err instanceof Error ? err.message : 'Failed' }))
                   } finally {
@@ -379,6 +381,11 @@ export function Marketplace() {
     load()
   }
 
+  const handleKeyUpdated = (key: string, value: string) => {
+    setStoredKeys(prev => new Set([...prev, key]))
+    setKeyValues(prev => ({ ...prev, [key]: value }))
+  }
+
   const categories = useMemo(() => {
     const cats = new Set(modules.map(m => m.path.split('/')[0]))
     return ['all', ...Array.from(cats).sort()]
@@ -471,7 +478,7 @@ export function Marketplace() {
       ) : (
         <div className="card overflow-hidden">
           {filtered.map(m => (
-            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} storedKeys={storedKeys} keyValues={keyValues} depsSatisfied={depsSatisfied} onDepsInstalled={handleDepsInstalled} onKeyChanged={load} />
+            <MarketplaceRow key={m.path} module={m} onUpdate={handleUpdate} storedKeys={storedKeys} keyValues={keyValues} depsSatisfied={depsSatisfied} onDepsInstalled={handleDepsInstalled} onKeyChanged={load} onKeyUpdated={handleKeyUpdated} />
           ))}
         </div>
       )}
