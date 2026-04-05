@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   getTables, getTable, getExports, exportTableUrl, getModules, getMarketplace,
   getTableSchema, insertRow, deleteRow, updateNotes, runQuery,
-  installModule, TableResponse, ColumnSchema,
+  installModule, getDashboard, TableResponse, ColumnSchema,
 } from '../api/client'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { Spinner } from '../components/ui/Spinner'
@@ -426,6 +426,7 @@ export function DataTables() {
   const { active } = useWorkspace()
 
   const [tables, setTables] = useState<string[]>([])
+  const [tableCounts, setTableCounts] = useState<Record<string, number>>({})
   const [exports, setExports] = useState<string[]>([])
   const [installedModules, setInstalledModules] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<string | null>(tableParam ?? null)
@@ -442,11 +443,12 @@ export function DataTables() {
   useEffect(() => {
     setLoadingList(true)
     setTableData(null)
-    Promise.all([getTables(), getExports(), getModules()])
-      .then(([t, e, mods]) => {
+    Promise.all([getTables(), getExports(), getModules(), getDashboard()])
+      .then(([t, e, mods, dash]) => {
         setTables(t.tables)
         setExports(e.exports)
         setInstalledModules(new Set(mods.modules))
+        setTableCounts(Object.fromEntries(dash.records.map(r => [r.name, r.count])))
       })
       .finally(() => setLoadingList(false))
   }, [active])
@@ -518,8 +520,13 @@ export function DataTables() {
             <div className="border-t border-zinc-800/50 pt-2">
               {tables.map(t => (
                 <button key={t} onClick={() => handleSelect(t)}
-                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${selected === t ? 'bg-brand/10 text-brand' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'}`}>
-                  {t}
+                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between gap-1 ${selected === t ? 'bg-brand/10 text-brand' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'}`}>
+                  <span className="truncate">{t}</span>
+                  {tableCounts[t] !== undefined && (
+                    <span className={`flex-shrink-0 tabular-nums ${selected === t ? 'text-brand/70' : 'text-zinc-600'}`}>
+                      {tableCounts[t]}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

@@ -83,7 +83,7 @@ function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied
                   className={`${allDepsSatisfied ? 'badge-green' : 'badge-amber'} hover:opacity-80 transition-opacity cursor-pointer`}
                   title={allDepsSatisfied ? 'All dependencies satisfied' : 'Has dependencies — click for details'}
                 >
-                  dependencies
+                  {allDepsSatisfied ? 'dependencies ✓' : 'dependencies'}
                 </button>
               )}
               {hasKeys && (
@@ -92,7 +92,7 @@ function MarketplaceRow({ module, onUpdate, storedKeys, keyValues, depsSatisfied
                   className={`${allKeysSatisfied ? 'badge-green' : 'badge-amber'} hover:opacity-80 transition-opacity cursor-pointer`}
                   title={allKeysSatisfied ? 'All required keys are present' : 'Requires API key — click for details'}
                 >
-                  🔑 {allKeysSatisfied ? 'keys ok' : 'key required'}
+                  🔑 {allKeysSatisfied ? 'keys ✓' : 'key required'}
                 </button>
               )}
             </div>
