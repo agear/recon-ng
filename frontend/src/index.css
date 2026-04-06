@@ -71,3 +71,65 @@
     @apply badge bg-zinc-800 text-zinc-400 border border-zinc-700;
   }
 }
+
+/* ── Light mode overrides ─────────────────────────────────────────────────
+   Tailwind utility specificity is 0,1,0. Using html:not(.dark) gives
+   specificity 0,2,1 so these rules win without !important.
+   ──────────────────────────────────────────────────────────────────────── */
+html:not(.dark) {
+  /* Page-level backgrounds */
+  &.bg-zinc-950, & .bg-zinc-950 { background-color: #f4f4f5; } /* zinc-100 */
+  & .bg-zinc-900 { background-color: #e4e4e7; }                /* zinc-200 */
+  & .bg-zinc-800 { background-color: #d4d4d8; }                /* zinc-300 */
+  & .bg-zinc-700 { background-color: #a1a1aa; }                /* zinc-500 */
+
+  /* Text */
+  & .text-zinc-100 { color: #18181b; }  /* zinc-900 */
+  & .text-zinc-200 { color: #27272a; }  /* zinc-800 */
+  & .text-zinc-300 { color: #3f3f46; }  /* zinc-700 */
+  & .text-zinc-400 { color: #52525b; }  /* zinc-600 */
+  & .text-zinc-500 { color: #71717a; }  /* zinc-500 */
+  & .text-zinc-600 { color: #71717a; }  /* zinc-500 */
+
+  /* Borders */
+  & .border-zinc-800 { border-color: #d4d4d8; } /* zinc-300 */
+  & .border-zinc-700 { border-color: #a1a1aa; } /* zinc-500 */
+
+  /* Hover states — lower specificity than active selectors but still
+     override Tailwind since we're under html:not(.dark) */
+  & .hover\:bg-zinc-800:hover { background-color: #d4d4d8; }
+  & .hover\:bg-zinc-700:hover { background-color: #a1a1aa; }
+
+  /* Component classes */
+  & .input {
+    background-color: #ffffff;
+    border-color: #a1a1aa;
+    color: #18181b;
+  }
+  & .input::placeholder { color: #a1a1aa; }
+
+  & .btn-ghost {
+    color: #3f3f46;
+    border-color: #a1a1aa;
+  }
+  & .btn-ghost:hover { background-color: #d4d4d8; }
+
+  & .card {
+    background-color: #ffffff;
+    border-color: #d4d4d8;
+  }
+
+  & .badge-zinc {
+    background-color: #e4e4e7;
+    color: #52525b;
+    border-color: #a1a1aa;
+  }
+
+  /* Scrollbar */
+  & ::-webkit-scrollbar-track { background-color: #e4e4e7; }
+  & ::-webkit-scrollbar-thumb { background-color: #a1a1aa; }
+  & ::-webkit-scrollbar-thumb:hover { background-color: #71717a; }
+
+  /* Body background (set directly on body) */
+  & body { background-color: #f4f4f5; color: #18181b; }
+}

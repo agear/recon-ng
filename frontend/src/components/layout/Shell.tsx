@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { WorkspaceContext } from '../../hooks/useWorkspace'
+import { useTheme } from '../../hooks/useTheme'
 import { activateWorkspace, createWorkspace, getWorkspaces } from '../../api/client'
 import { Spinner } from '../ui/Spinner'
 import { Modal } from '../ui/Modal'
@@ -17,6 +18,7 @@ const navItems = [
 ]
 
 export function Shell({ children }: { children: ReactNode }) {
+  const { dark, toggle: toggleTheme } = useTheme()
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [active, setActiveState] = useState('')
   const [loading, setLoading] = useState(true)
@@ -122,6 +124,24 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
             <p className="text-xs text-zinc-600">v5.1.2</p>
             <div className="flex items-center gap-3">
+              <button
+                onClick={toggleTheme}
+                className="text-zinc-600 hover:text-brand transition-colors"
+                title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+                aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {dark ? (
+                  /* Sun icon */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.78a1 1 0 011.42 1.42l-.7.7a1 1 0 11-1.42-1.42l.7-.7zM18 9a1 1 0 110 2h-1a1 1 0 110-2h1zM4.22 15.78a1 1 0 001.42-1.42l-.7-.7a1 1 0 00-1.42 1.42l.7.7zM10 15a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-5.78-.22a1 1 0 001.42 1.42l.7-.7a1 1 0 00-1.42-1.42l-.7.7zM3 10a1 1 0 100 2H2a1 1 0 100-2h1zm12.78 4.78a1 1 0 001.42-1.42l-.7-.7a1 1 0 00-1.42 1.42l.7.7zM10 6a4 4 0 100 8 4 4 0 000-8z" />
+                  </svg>
+                ) : (
+                  /* Moon icon */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                  </svg>
+                )}
+              </button>
               <a
                 href="https://github.com/lanmaster53/recon-ng/wiki"
                 target="_blank"
